@@ -19,7 +19,12 @@ import type {
 } from "../domain/types";
 import { selectFormatAdapter } from "../formats";
 import { validateTranslatedUnits } from "../providers/validation";
-import { findFreshTranslation, writeFileAtomic, writeMetadata } from "./metadataStore";
+import {
+  deleteStaleAutoTranslations,
+  findFreshTranslation,
+  writeFileAtomic,
+  writeMetadata
+} from "./metadataStore";
 
 const CORE_VERSION = "0.1.0";
 
@@ -35,6 +40,7 @@ export async function translateDocument(
 
   const sourceBytes = await fs.readFile(sourcePath);
   const sourceHash = sha256Hex(sourceBytes);
+  const sourceRelativePath = relativeToDirectory(sourceDirectory, sourcePath);
   reportProgress(options, {
     stage: "checking-cache",
     message: "Checking translation cache",
@@ -78,7 +84,7 @@ export async function translateDocument(
   const extractedUnits = await adapter.extractUnits(parsed);
   const termLocked = applyTermLocks(extractedUnits, options.termLocks ?? []);
   const units = termLocked.units;
-  const documentId = `${relativeToDirectory(sourceDirectory, sourcePath)}:sha256:${sourceHash}`;
+  const documentId = `${sourceRelativePath}:sha256:${sourceHash}`;
   reportProgress(options, {
     stage: "preparing",
     message: `Preparing ${units.length} translation segment${units.length === 1 ? "" : "s"}`,
@@ -155,20 +161,38 @@ export async function translateDocument(
 
   const targetStat = await fs.stat(targetPath);
   const sourceStat = await fs.stat(sourcePath);
+  const cleanupWarnings: string[] = [];
+  if (options.deleteStaleAutoTranslations) {
+    const cleanup = await deleteStaleAutoTranslations({
+      sourceDirectory,
+      sourceRelativePath,
+      currentSourceHash: sourceHash,
+      targetLanguage: options.targetLanguage,
+      providerId: options.provider.id,
+      outputDirectoryMode,
+      cacheDirectoryName
+    });
+    if (cleanup.failedPaths.length > 0) {
+      cleanupWarnings.push(
+        `Could not delete ${cleanup.failedPaths.length} stale translation cache file${
+          cleanup.failedPaths.length === 1 ? "" : "s"
+        }.`
+      );
+    }
+  }
   const warnings = [
     ...providerWarnings,
     ...validationIssues.filter((issue) => issue.severity === "warning").map((issue) => issue.message),
-    ...reconstructed.warnings
+    ...reconstructed.warnings,
+    ...cleanupWarnings
   ];
   const metadata: TranslationMetadata = {
     schemaVersion: 1,
-    translationId: `${relativeToDirectory(sourceDirectory, sourcePath)}:sha256:${sourceHash}:${
-      options.targetLanguage
-    }:${timestamp}`,
+    translationId: `${sourceRelativePath}:sha256:${sourceHash}:${options.targetLanguage}:${timestamp}`,
     status: "complete",
     createdAt: now.toISOString(),
     source: {
-      relativePath: relativeToDirectory(sourceDirectory, sourcePath),
+      relativePath: sourceRelativePath,
       sha256: sourceHash,
       sizeBytes: sourceBytes.byteLength,
       mtimeUtc: sourceStat.mtime.toISOString(),

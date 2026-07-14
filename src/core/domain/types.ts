@@ -192,6 +192,7 @@ export interface TranslateDocumentOptions {
   readonly now?: Date;
   readonly cacheDirectoryName?: string;
   readonly outputDirectoryMode?: OutputDirectoryMode;
+  readonly deleteStaleAutoTranslations?: boolean;
   readonly profileName?: string;
   readonly insertMarkdownHeader?: boolean;
   readonly termLocks?: readonly string[];

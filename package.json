@@ -150,6 +150,11 @@
           "default": ".vscode-doc-translator-cache",
           "description": "Hidden sidecar directory name written next to the source document."
         },
+        "docTranslator.cache.deleteStaleAutoTranslations": {
+          "type": "boolean",
+          "default": false,
+          "description": "Delete old unedited auto-translated documents and their metadata when a new translation is created after a stale cache miss."
+        },
         "docTranslator.output.directoryMode": {
           "type": "string",
           "enum": [

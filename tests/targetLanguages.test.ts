@@ -50,6 +50,9 @@ describe("target languages", () => {
             "docTranslator.defaultTargetLanguage": {
               enum: string[];
             };
+            "docTranslator.cache.deleteStaleAutoTranslations": {
+              default: boolean;
+            };
           };
         };
       };
@@ -58,6 +61,11 @@ describe("target languages", () => {
     expect(
       packageJson.contributes.configuration.properties["docTranslator.defaultTargetLanguage"].enum
     ).toEqual(TARGET_LANGUAGES.map((language) => language.code));
+    expect(
+      packageJson.contributes.configuration.properties[
+        "docTranslator.cache.deleteStaleAutoTranslations"
+      ].default
+    ).toBe(false);
   });
 });
 

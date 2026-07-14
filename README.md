@@ -13,6 +13,7 @@ VS Code Doc Translator creates a translated copy of your document, keeps the ori
 - Preserve structure for supported text formats through format adapters instead of raw full-file replacement.
 - Save translated files next to the source document by default, or keep them inside a hidden cache directory.
 - Reuse fresh translations when the source file, target language, provider, output mode, and translated artifact hash still match.
+- Optionally delete old unedited auto-translated files after a stale cache miss creates a new translation.
 - Track translation progress in the VS Code status bar.
 - Open the translated file automatically, or open a source/translation diff after translation.
 - Configure provider, target language, output mode, term locks, endpoints, and API keys from a settings webview.
@@ -80,6 +81,8 @@ If `docTranslator.output.directoryMode` is set to `hidden-cache`, both the trans
 
 Cache reuse is hash-based. A cached translation is reused only when the source hash, target language, provider, output mode, and translated file hash still match. If the source file changes, a new translated artifact is created. If the translated artifact was edited, the extension avoids treating it as a fresh cache hit.
 
+By default, old auto-translated files are kept. If you enable `docTranslator.cache.deleteStaleAutoTranslations`, the extension deletes older unedited auto translations and their metadata after a new translation is created for the same source file, target language, provider, and output mode. Edited translated files are kept because their hash no longer matches the metadata.
+
 ## VS Code Settings
 
 Most settings can be changed from the visual panel opened by `Doc Translator: Open Settings`.
@@ -93,6 +96,7 @@ Most settings can be changed from the visual panel opened by `Doc Translator: Op
 | `docTranslator.output.showDiffAfterTranslate` | `false` | Open a VS Code diff between the source and translated files. |
 | `docTranslator.termLocks` | `[]` | Terms that must remain untranslated. |
 | `docTranslator.cache.hiddenDirectoryName` | `.vscode-doc-translator-cache` | Metadata/cache directory written next to the source document. |
+| `docTranslator.cache.deleteStaleAutoTranslations` | `false` | Delete old unedited auto-translated files and metadata after a stale cache miss creates a new translation. |
 | `docTranslator.llm.endpoint` | `https://api.openai.com/v1` | OpenAI-compatible API base URL. |
 | `docTranslator.llm.model` | empty | Model name for the OpenAI-compatible provider. |
 | `docTranslator.llm.maxContextTokens` | `128000` | Model context budget used for LLM request chunking. |

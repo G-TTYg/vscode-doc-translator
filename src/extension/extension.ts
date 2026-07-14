@@ -72,6 +72,10 @@ async function runTranslate(
     ".vscode-doc-translator-cache"
   );
   const outputDirectoryMode = config.get<OutputDirectoryMode>("output.directoryMode", "same-dir");
+  const deleteStaleAutoTranslations = config.get<boolean>(
+    "cache.deleteStaleAutoTranslations",
+    false
+  );
   const insertMarkdownHeader = config.get<boolean>("markdown.insertAutoTranslationHeader", false);
   const openAfterTranslate = config.get<boolean>("output.openAfterTranslate", true);
   const showDiffAfterTranslate = config.get<boolean>("output.showDiffAfterTranslate", false);
@@ -136,6 +140,7 @@ async function runTranslate(
           provider,
           cacheDirectoryName,
           outputDirectoryMode,
+          deleteStaleAutoTranslations,
           insertMarkdownHeader,
           termLocks,
           onProgress: (event) => {

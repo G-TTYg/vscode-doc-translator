@@ -23,6 +23,23 @@ export interface FreshTranslation {
   readonly targetPath: string;
 }
 
+export interface StaleAutoTranslationCleanupQuery {
+  readonly sourceDirectory: string;
+  readonly sourceRelativePath: string;
+  readonly currentSourceHash: string;
+  readonly targetLanguage: string;
+  readonly providerId: string;
+  readonly outputDirectoryMode?: OutputDirectoryMode;
+  readonly cacheDirectoryName?: string;
+}
+
+export interface StaleAutoTranslationCleanupResult {
+  readonly deletedTargetPaths: readonly string[];
+  readonly deletedMetadataPaths: readonly string[];
+  readonly skippedEditedTargetPaths: readonly string[];
+  readonly failedPaths: readonly string[];
+}
+
 export async function findFreshTranslation(
   query: FreshTranslationQuery
 ): Promise<FreshTranslation | undefined> {
@@ -64,6 +81,75 @@ export async function findFreshTranslation(
   return candidates.sort((a, b) => b.metadata.createdAt.localeCompare(a.metadata.createdAt))[0];
 }
 
+export async function deleteStaleAutoTranslations(
+  query: StaleAutoTranslationCleanupQuery
+): Promise<StaleAutoTranslationCleanupResult> {
+  const sourceDirectory = path.resolve(query.sourceDirectory);
+  const cacheDirectory = cacheDirectoryPath(sourceDirectory, query.cacheDirectoryName);
+  const entries = await safeReadDirectory(cacheDirectory);
+  const outputDirectoryMode = query.outputDirectoryMode ?? "same-dir";
+  const deletedTargetPaths: string[] = [];
+  const deletedMetadataPaths: string[] = [];
+  const skippedEditedTargetPaths: string[] = [];
+  const failedPaths: string[] = [];
+
+  for (const entry of entries) {
+    if (!entry.endsWith(".meta.json")) {
+      continue;
+    }
+
+    const metadataPath = path.join(cacheDirectory, entry);
+    const metadata = await readMetadata(metadataPath);
+    if (!metadata || !matchesCleanupScope(metadata, query, outputDirectoryMode)) {
+      continue;
+    }
+
+    const targetPath = path.resolve(sourceDirectory, metadata.target.relativePath);
+    if (!isPathInsideDirectory(targetPath, sourceDirectory)) {
+      continue;
+    }
+
+    const targetBytes = await safeReadFile(targetPath);
+    if (!targetBytes) {
+      if (await removeFile(metadataPath)) {
+        deletedMetadataPaths.push(metadataPath);
+      } else {
+        failedPaths.push(metadataPath);
+      }
+      continue;
+    }
+
+    if (sha256Hex(targetBytes) !== metadata.target.sha256) {
+      skippedEditedTargetPaths.push(targetPath);
+      continue;
+    }
+
+    if (metadata.source.sha256 === query.currentSourceHash) {
+      continue;
+    }
+
+    if (await removeFile(targetPath)) {
+      deletedTargetPaths.push(targetPath);
+    } else {
+      failedPaths.push(targetPath);
+      continue;
+    }
+
+    if (await removeFile(metadataPath)) {
+      deletedMetadataPaths.push(metadataPath);
+    } else {
+      failedPaths.push(metadataPath);
+    }
+  }
+
+  return {
+    deletedTargetPaths,
+    deletedMetadataPaths,
+    skippedEditedTargetPaths,
+    failedPaths
+  };
+}
+
 export async function writeMetadata(input: {
   readonly sourceDirectory: string;
   readonly metadataFileName: string;
@@ -103,6 +189,33 @@ function inferOutputDirectoryMode(
     : "same-dir";
 }
 
+function matchesCleanupScope(
+  metadata: TranslationMetadata,
+  query: StaleAutoTranslationCleanupQuery,
+  outputDirectoryMode: OutputDirectoryMode
+): boolean {
+  return (
+    metadata.status === "complete" &&
+    normalizeRelativePath(metadata.source.relativePath) ===
+      normalizeRelativePath(query.sourceRelativePath) &&
+    metadata.target.language === query.targetLanguage &&
+    metadata.provider.id === query.providerId &&
+    inferOutputDirectoryMode(metadata, query.cacheDirectoryName) === outputDirectoryMode
+  );
+}
+
+function normalizeRelativePath(value: string): string {
+  return value.split(/[\\/]+/).join("/");
+}
+
+function isPathInsideDirectory(filePath: string, directory: string): boolean {
+  const relativePath = path.relative(directory, filePath);
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
+  );
+}
+
 async function readMetadata(metadataPath: string): Promise<TranslationMetadata | undefined> {
   try {
     return JSON.parse(await fs.readFile(metadataPath, "utf8")) as TranslationMetadata;
@@ -124,6 +237,15 @@ async function safeReadFile(filePath: string): Promise<Buffer | undefined> {
     return await fs.readFile(filePath);
   } catch {
     return undefined;
+  }
+}
+
+async function removeFile(filePath: string): Promise<boolean> {
+  try {
+    await fs.rm(filePath, { force: true });
+    return true;
+  } catch {
+    return false;
   }
 }
 

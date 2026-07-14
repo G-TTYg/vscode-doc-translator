@@ -161,6 +161,66 @@ describe("translateDocument", () => {
     await expect(fs.readFile(second.targetPath, "utf8")).resolves.toContain(
       "[zh-CN] Updated text."
     );
+    await expect(fs.stat(first.targetPath)).resolves.toBeTruthy();
+    await expect(fs.stat(first.metadataPath)).resolves.toBeTruthy();
+  });
+
+  it("deletes old unedited auto translations when stale cleanup is enabled", async () => {
+    const sourcePath = path.join(tempDir, "cleanup.txt");
+    await fs.writeFile(sourcePath, "Original text.\n", "utf8");
+
+    const first = await translateDocument({
+      sourcePath,
+      targetLanguage: "zh-CN",
+      provider: new PrefixTranslationProvider(),
+      now: new Date("2026-07-13T15:02:45Z")
+    });
+
+    await fs.writeFile(sourcePath, "Updated text.\n", "utf8");
+
+    const second = await translateDocument({
+      sourcePath,
+      targetLanguage: "zh-CN",
+      provider: new PrefixTranslationProvider(),
+      deleteStaleAutoTranslations: true,
+      now: new Date("2026-07-13T16:00:00Z")
+    });
+
+    expect(second.status).toBe("translated");
+    expect(second.targetPath).not.toBe(first.targetPath);
+    await expectPathMissing(first.targetPath);
+    await expectPathMissing(first.metadataPath);
+    await expect(fs.stat(second.targetPath)).resolves.toBeTruthy();
+    await expect(fs.stat(second.metadataPath)).resolves.toBeTruthy();
+  });
+
+  it("keeps edited stale translations when cleanup is enabled", async () => {
+    const sourcePath = path.join(tempDir, "edited.txt");
+    await fs.writeFile(sourcePath, "Original text.\n", "utf8");
+
+    const first = await translateDocument({
+      sourcePath,
+      targetLanguage: "zh-CN",
+      provider: new PrefixTranslationProvider(),
+      now: new Date("2026-07-13T15:02:45Z")
+    });
+
+    await fs.writeFile(first.targetPath, "Manual translation edit.\n", "utf8");
+    await fs.writeFile(sourcePath, "Updated text.\n", "utf8");
+
+    const second = await translateDocument({
+      sourcePath,
+      targetLanguage: "zh-CN",
+      provider: new PrefixTranslationProvider(),
+      deleteStaleAutoTranslations: true,
+      now: new Date("2026-07-13T16:00:00Z")
+    });
+
+    expect(second.status).toBe("translated");
+    await expect(fs.readFile(first.targetPath, "utf8")).resolves.toBe(
+      "Manual translation edit.\n"
+    );
+    await expect(fs.stat(first.metadataPath)).resolves.toBeTruthy();
   });
 
   it("translates Markdown text while preserving code fences and link targets", async () => {
@@ -240,3 +300,7 @@ describe("translateDocument", () => {
     expect(translated).toBe("# [zh-CN] Hello\n");
   });
 });
+
+async function expectPathMissing(filePath: string): Promise<void> {
+  await expect(fs.stat(filePath)).rejects.toMatchObject({ code: "ENOENT" });
+}

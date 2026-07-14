@@ -16,6 +16,7 @@ interface SettingsState {
   readonly openAfterTranslate: boolean;
   readonly showDiffAfterTranslate: boolean;
   readonly cacheDirectoryName: string;
+  readonly deleteStaleAutoTranslations: boolean;
   readonly termLocks: readonly string[];
   readonly insertMarkdownHeader: boolean;
   readonly llmEndpoint: string;
@@ -88,6 +89,10 @@ async function readSettingsState(context: vscode.ExtensionContext): Promise<Sett
       "cache.hiddenDirectoryName",
       ".vscode-doc-translator-cache"
     ),
+    deleteStaleAutoTranslations: config.get<boolean>(
+      "cache.deleteStaleAutoTranslations",
+      false
+    ),
     termLocks: config.get<string[]>("termLocks", []),
     insertMarkdownHeader: config.get<boolean>("markdown.insertAutoTranslationHeader", false),
     llmEndpoint: config.get<string>("llm.endpoint", "https://api.openai.com/v1"),
@@ -126,6 +131,12 @@ async function saveSettingsState(
   await updateIfDefined(config, "output.openAfterTranslate", values.openAfterTranslate, target);
   await updateIfDefined(config, "output.showDiffAfterTranslate", values.showDiffAfterTranslate, target);
   await updateIfDefined(config, "cache.hiddenDirectoryName", values.cacheDirectoryName, target);
+  await updateIfDefined(
+    config,
+    "cache.deleteStaleAutoTranslations",
+    values.deleteStaleAutoTranslations,
+    target
+  );
   await updateIfDefined(config, "termLocks", values.termLocks, target);
   await updateIfDefined(
     config,
@@ -307,6 +318,9 @@ function renderSettingsHtml(state: SettingsState): string {
         <label class="check"><input type="checkbox" name="showDiffAfterTranslate" ${
           state.showDiffAfterTranslate ? "checked" : ""
         } /><span>Open source/translation diff</span></label>
+        <label class="check"><input type="checkbox" name="deleteStaleAutoTranslations" ${
+          state.deleteStaleAutoTranslations ? "checked" : ""
+        } /><span>Delete old unedited auto translations when cache is stale</span></label>
         <label class="check"><input type="checkbox" name="insertMarkdownHeader" ${
           state.insertMarkdownHeader ? "checked" : ""
         } /><span>Insert Markdown auto-translation header</span></label>
@@ -383,6 +397,7 @@ function renderSettingsHtml(state: SettingsState): string {
           cacheDirectoryName: data.get("cacheDirectoryName"),
           openAfterTranslate: data.get("openAfterTranslate") === "on",
           showDiffAfterTranslate: data.get("showDiffAfterTranslate") === "on",
+          deleteStaleAutoTranslations: data.get("deleteStaleAutoTranslations") === "on",
           termLocks: String(data.get("termLocks") || "").split("\\n").map((item) => item.trim()).filter(Boolean),
           insertMarkdownHeader: data.get("insertMarkdownHeader") === "on",
           llmEndpoint: data.get("llmEndpoint"),

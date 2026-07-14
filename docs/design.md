@@ -243,6 +243,7 @@ metadata 不能包含 API Key 或 Bearer Token。可以包含 provider id、endp
 - 译文已被编辑：当前译文文件 hash 不等于 `metadata.target.sha256`。工具不能静默覆盖它。
 - 当源文档未变化、目标语言一致、provider 一致、输出模式一致且译文未被编辑，插件可直接打开缓存译文。
 - 当源文档已变化，默认创建新的译文文件。未来可以用 segment-level cache 复用未变化的 unit。
+- 可选设置 `docTranslator.cache.deleteStaleAutoTranslations` 默认为关闭。开启后，插件在新译文成功创建时清理同一源文件、目标语言、provider 和输出模式下的旧自动译文；只有旧译文当前 hash 仍等于 metadata 记录的 target hash 时才会删除，已被用户编辑的译文必须保留。
 
 ## 9. 配置
 
@@ -258,6 +259,7 @@ metadata 不能包含 API Key 或 Bearer Token。可以包含 provider id、endp
   "docTranslator.output.showDiffAfterTranslate": false,
   "docTranslator.termLocks": ["OpenAI", "VS Code"],
   "docTranslator.cache.hiddenDirectoryName": ".vscode-doc-translator-cache",
+  "docTranslator.cache.deleteStaleAutoTranslations": false,
   "docTranslator.llm.endpoint": "https://api.example.com/v1",
   "docTranslator.llm.model": "your-model-name",
   "docTranslator.llm.maxContextTokens": 128000,
