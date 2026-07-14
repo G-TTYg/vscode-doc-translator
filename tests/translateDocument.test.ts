@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { translateDocument } from "../src/core/application/translateDocument";
+import type { TranslationProgressStage } from "../src/core/domain/types";
 import { FakeTranslationProvider } from "../src/core/providers/fakeProvider";
 
 let tempDir: string;
@@ -97,6 +98,41 @@ describe("translateDocument", () => {
 
     expect(cachedHidden.status).toBe("cached");
     expect(cachedHidden.targetPath).toBe(hidden.targetPath);
+  });
+
+  it("reports progress for translation and cache reuse", async () => {
+    const sourcePath = path.join(tempDir, "progress.txt");
+    await fs.writeFile(sourcePath, "Track progress.\n", "utf8");
+    const translatedStages: TranslationProgressStage[] = [];
+
+    await translateDocument({
+      sourcePath,
+      targetLanguage: "zh-CN",
+      provider: new FakeTranslationProvider(),
+      now: new Date("2026-07-13T15:02:45Z"),
+      onProgress: (progress) => translatedStages.push(progress.stage)
+    });
+
+    expect(translatedStages).toEqual([
+      "checking-cache",
+      "parsing",
+      "preparing",
+      "translating",
+      "validating",
+      "writing",
+      "complete"
+    ]);
+
+    const cachedStages: TranslationProgressStage[] = [];
+    await translateDocument({
+      sourcePath,
+      targetLanguage: "zh-CN",
+      provider: new FakeTranslationProvider(),
+      now: new Date("2026-07-13T16:00:00Z"),
+      onProgress: (progress) => cachedStages.push(progress.stage)
+    });
+
+    expect(cachedStages).toEqual(["checking-cache", "cached"]);
   });
 
   it("retranslates when the source hash changes", async () => {

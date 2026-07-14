@@ -2,6 +2,22 @@ export type TranslationRequestPackaging = "segmented-units" | "ordered-json-cont
 
 export type OutputDirectoryMode = "same-dir" | "hidden-cache";
 
+export type TranslationProgressStage =
+  | "checking-cache"
+  | "parsing"
+  | "preparing"
+  | "translating"
+  | "validating"
+  | "writing"
+  | "cached"
+  | "complete";
+
+export interface TranslationProgress {
+  readonly stage: TranslationProgressStage;
+  readonly message: string;
+  readonly progress: number;
+}
+
 export type TranslationUnitKind =
   | "paragraph"
   | "heading"
@@ -179,6 +195,7 @@ export interface TranslateDocumentOptions {
   readonly profileName?: string;
   readonly insertMarkdownHeader?: boolean;
   readonly termLocks?: readonly string[];
+  readonly onProgress?: (progress: TranslationProgress) => void;
 }
 
 export interface TranslateDocumentResult {

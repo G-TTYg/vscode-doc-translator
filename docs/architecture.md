@@ -36,7 +36,7 @@ flowchart LR
 | `src/core/providers/` | Provider factory、fake/OpenAI-compatible/DeepL/Google/Microsoft provider、HTTP retry、传统 provider batching、AI 分段。 |
 | `src/core/application/` | `translateDocument` use case、metadata/cache store、文件读取和原子写入。 |
 | `src/cli/` | CLI `translate` 命令和参数解析。 |
-| `src/extension/` | VS Code 命令、右键菜单入口、SecretStorage、设置 webview、diff preview。 |
+| `src/extension/` | VS Code 命令、右键菜单入口、SecretStorage、设置 webview、diff preview、状态栏任务状态。 |
 | `tests/` | 命名、metadata、格式适配器、provider contract、AI chunking 和 provider factory 测试。 |
 
 依赖方向保持为 entrypoints 调用 shared core；core 依赖 domain contracts、format adapters 和 provider adapters；provider 外部 API 细节不能泄漏到格式重建或 metadata store。
@@ -202,6 +202,18 @@ sequenceDiagram
     C-->>E: translated file path + warnings
   end
 ```
+
+## VS Code 状态栏
+
+VS Code extension 在激活时创建 `TranslationStatusBar`。状态栏项位于右侧，负责显示：
+
+- idle：无任务运行，点击打开设置；
+- running：翻译任务运行中，显示阶段进度和百分比；
+- cached：命中缓存，点击打开最近译文；
+- success：翻译成功，点击打开最近译文；
+- failed：翻译失败，显示错误状态，点击打开设置。
+
+Core use case 通过可选 `onProgress` 回调报告阶段事件。当前阶段包括 cache 检查、解析、准备分段、调用 provider、校验、写入、缓存命中和完成。CLI 不需要传入该回调，因此不会被 VS Code UI 细节耦合。
 
 ## 关键不变量
 

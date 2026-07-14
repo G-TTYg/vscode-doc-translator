@@ -12,6 +12,7 @@ import type {
   OutputDirectoryMode,
   TranslateDocumentOptions,
   TranslateDocumentResult,
+  TranslationProgress,
   TranslatedUnit,
   TranslationMap,
   TranslationMetadata
@@ -34,6 +35,11 @@ export async function translateDocument(
 
   const sourceBytes = await fs.readFile(sourcePath);
   const sourceHash = sha256Hex(sourceBytes);
+  reportProgress(options, {
+    stage: "checking-cache",
+    message: "Checking translation cache",
+    progress: 5
+  });
 
   if (!options.force) {
     const fresh = await findFreshTranslation({
@@ -45,6 +51,11 @@ export async function translateDocument(
       cacheDirectoryName
     });
     if (fresh) {
+      reportProgress(options, {
+        stage: "cached",
+        message: "Using cached translation",
+        progress: 100
+      });
       return {
         status: "cached",
         sourcePath,
@@ -56,6 +67,11 @@ export async function translateDocument(
     }
   }
 
+  reportProgress(options, {
+    stage: "parsing",
+    message: "Parsing source document",
+    progress: 15
+  });
   const sourceText = stripUtf8Bom(sourceBytes.toString("utf8"));
   const adapter = selectFormatAdapter(sourcePath);
   const parsed = await adapter.parse({ sourcePath, text: sourceText });
@@ -63,6 +79,11 @@ export async function translateDocument(
   const termLocked = applyTermLocks(extractedUnits, options.termLocks ?? []);
   const units = termLocked.units;
   const documentId = `${relativeToDirectory(sourceDirectory, sourcePath)}:sha256:${sourceHash}`;
+  reportProgress(options, {
+    stage: "preparing",
+    message: `Preparing ${units.length} translation segment${units.length === 1 ? "" : "s"}`,
+    progress: 30
+  });
   const providerRequest =
     options.provider.capabilities.requestPackaging === "ordered-json-context"
       ? {
@@ -81,10 +102,20 @@ export async function translateDocument(
           units
         };
 
+  reportProgress(options, {
+    stage: "translating",
+    message: `Translating with ${options.provider.displayName}`,
+    progress: 45
+  });
   const providerResult = await options.provider.translateBatch(providerRequest);
   const translatedUnits = resultToMap(providerResult.translations, termLocked.tokensByUnitId);
   const providerWarnings = validateTranslatedUnits(units, providerResult);
 
+  reportProgress(options, {
+    stage: "validating",
+    message: "Validating translated segments",
+    progress: 75
+  });
   const validationIssues = adapter.validate ? await adapter.validate(parsed, translatedUnits) : [];
   const validationErrors = validationIssues.filter((issue) => issue.severity === "error");
   if (validationErrors.length > 0) {
@@ -113,6 +144,11 @@ export async function translateDocument(
     outputDirectoryPath(sourceDirectory, cacheDirectoryName, outputDirectoryMode),
     names.translatedFileName
   );
+  reportProgress(options, {
+    stage: "writing",
+    message: "Writing translated document",
+    progress: 90
+  });
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   await assertOutputDoesNotExist(targetPath);
   await writeFileAtomic(targetPath, translatedBytes);
@@ -188,6 +224,12 @@ export async function translateDocument(
     cacheDirectoryName
   });
 
+  reportProgress(options, {
+    stage: "complete",
+    message: "Translation complete",
+    progress: 100
+  });
+
   return {
     status: "translated",
     sourcePath,
@@ -237,6 +279,13 @@ async function assertOutputDoesNotExist(targetPath: string): Promise<void> {
 
 function stripUtf8Bom(text: string): string {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+function reportProgress(
+  options: TranslateDocumentOptions,
+  progress: TranslationProgress
+): void {
+  options.onProgress?.(progress);
 }
 
 function outputDirectoryPath(
