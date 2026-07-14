@@ -48,9 +48,9 @@ export class MicrosoftTranslatorProvider implements TranslationProvider {
         `${trimTrailingSlash(this.options.endpoint ?? "https://api.cognitive.microsofttranslator.com")}/translate`
       );
       url.searchParams.set("api-version", "3.0");
-      url.searchParams.append("to", request.targetLanguage);
+      url.searchParams.append("to", normalizeMicrosoftLanguage(request.targetLanguage));
       if (request.sourceLanguage !== "auto") {
-        url.searchParams.set("from", request.sourceLanguage);
+        url.searchParams.set("from", normalizeMicrosoftLanguage(request.sourceLanguage));
       }
 
       const headers: Record<string, string> = {
@@ -93,4 +93,20 @@ export class MicrosoftTranslatorProvider implements TranslationProvider {
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function normalizeMicrosoftLanguage(language: string): string {
+  const normalized = language.trim().toLowerCase().replace(/_/g, "-");
+  const languageMap: Record<string, string> = {
+    "en-gb": "en",
+    "en-us": "en",
+    "pt-br": "pt",
+    "pt-pt": "pt-pt",
+    "zh-cn": "zh-Hans",
+    "zh-hans": "zh-Hans",
+    "zh-tw": "zh-Hant",
+    "zh-hant": "zh-Hant"
+  };
+
+  return languageMap[normalized] ?? normalized;
 }

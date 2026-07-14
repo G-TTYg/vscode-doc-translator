@@ -4,7 +4,7 @@ Translate whole documents from VS Code while preserving supported document struc
 
 VS Code Doc Translator creates a translated copy of your document, keeps the original untouched, and writes verifiable metadata beside the source file. It is designed for quick document translation inside a developer workflow, with provider adapters for OpenAI-compatible LLM APIs, DeepL, Google Cloud Translation, and Microsoft Translator.
 
-> Preview status: version 0.1.0 includes the first working VS Code extension, visual settings panel, cache model, format adapters, and provider adapters. External provider adapters require your own credentials and should be validated against your chosen live API before production use.
+> Preview status: version 0.1.1 includes the first working VS Code extension, visual settings panel, cache model, format adapters, and provider adapters. External provider adapters require your own credentials and should be validated against your chosen live API before production use.
 
 ## Features
 
@@ -16,6 +16,7 @@ VS Code Doc Translator creates a translated copy of your document, keeps the ori
 - Track translation progress in the VS Code status bar.
 - Open the translated file automatically, or open a source/translation diff after translation.
 - Configure provider, target language, output mode, term locks, endpoints, and API keys from a settings webview.
+- Choose the target language from an alphabetically sorted dropdown instead of typing provider-specific language codes by hand.
 - Keep provider secrets out of metadata and cache files.
 
 ## Open The Visual Settings Panel
@@ -85,7 +86,7 @@ Most settings can be changed from the visual panel opened by `Doc Translator: Op
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `docTranslator.defaultTargetLanguage` | `zh-CN` | Target language used by VS Code commands. |
+| `docTranslator.defaultTargetLanguage` | `zh-CN` | Target language used by VS Code commands. Choose it from the visual settings dropdown. |
 | `docTranslator.defaultProvider` | `openai-compatible` | Provider ID: `openai-compatible`, `deepl`, `google`, or `microsoft`. |
 | `docTranslator.output.directoryMode` | `same-dir` | `same-dir` writes translated files beside the source; `hidden-cache` writes them into the cache directory. |
 | `docTranslator.output.openAfterTranslate` | `true` | Open the translated file after translation. |

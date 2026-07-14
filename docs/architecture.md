@@ -126,6 +126,8 @@ interface TranslationProvider {
 
 传统机器翻译 provider 使用 `segmented-units`。OpenAI-compatible LLM provider 使用 `ordered-json-context`，并要求结构化 JSON 输出。
 
+Target language codes are selected from the VS Code settings language dictionary. Provider adapters own service-specific normalization, such as mapping `zh-CN` to DeepL `ZH-HANS` or Microsoft `zh-Hans`, so UI code can keep one canonical target language list.
+
 ## AI/LLM 分段算法
 
 OpenAI-compatible provider 根据模型上下文和单次输出预算构造请求：

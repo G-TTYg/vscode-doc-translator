@@ -3,6 +3,7 @@ import { translateDocument } from "../core/application/translateDocument";
 import type { OutputDirectoryMode } from "../core/domain/types";
 import { createProvider } from "../core/providers/providerFactory";
 import { openSettingsPanel, SECRET_KEYS } from "./settingsPanel";
+import { normalizeTargetLanguageCode } from "./targetLanguages";
 import { TranslationStatusBar } from "./translationStatusBar";
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -62,7 +63,9 @@ async function runTranslate(
   }
 
   const config = vscode.workspace.getConfiguration("docTranslator");
-  const targetLanguage = config.get<string>("defaultTargetLanguage", "zh-CN");
+  const targetLanguage = normalizeTargetLanguageCode(
+    config.get<string>("defaultTargetLanguage", "zh-CN")
+  );
   const providerId = config.get<string>("defaultProvider", "openai-compatible");
   const cacheDirectoryName = config.get<string>(
     "cache.hiddenDirectoryName",

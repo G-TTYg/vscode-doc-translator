@@ -83,7 +83,15 @@ export class DeepLProvider implements TranslationProvider {
 }
 
 function normalizeDeepLLanguage(language: string): string {
-  return language.replace("-", "_").toUpperCase();
+  const normalized = language.trim().toLowerCase().replace(/_/g, "-");
+  const languageMap: Record<string, string> = {
+    "zh-cn": "ZH-HANS",
+    "zh-hans": "ZH-HANS",
+    "zh-tw": "ZH-HANT",
+    "zh-hant": "ZH-HANT"
+  };
+
+  return languageMap[normalized] ?? normalized.toUpperCase();
 }
 
 function trimTrailingSlash(value: string): string {

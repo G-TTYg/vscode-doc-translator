@@ -55,9 +55,11 @@ export class GoogleTranslateProvider implements TranslationProvider {
         },
         body: JSON.stringify({
           q: batch.units.map((unit) => unit.sourceText),
-          target: request.targetLanguage,
+          target: normalizeGoogleLanguage(request.targetLanguage),
           format: "text",
-          ...(request.sourceLanguage === "auto" ? {} : { source: request.sourceLanguage })
+          ...(request.sourceLanguage === "auto"
+            ? {}
+            : { source: normalizeGoogleLanguage(request.sourceLanguage) })
         })
       });
 
@@ -87,4 +89,21 @@ export class GoogleTranslateProvider implements TranslationProvider {
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function normalizeGoogleLanguage(language: string): string {
+  const normalized = language.trim().toLowerCase().replace(/_/g, "-");
+  const languageMap: Record<string, string> = {
+    "en-gb": "en",
+    "en-us": "en",
+    nb: "no",
+    "pt-br": "pt",
+    "pt-pt": "pt",
+    "zh-cn": "zh-CN",
+    "zh-hans": "zh-CN",
+    "zh-tw": "zh-TW",
+    "zh-hant": "zh-TW"
+  };
+
+  return languageMap[normalized] ?? normalized;
 }

@@ -275,6 +275,8 @@ metadata 不能包含 API Key 或 Bearer Token。可以包含 provider id、endp
 
 VS Code 插件提供 `Doc Translator: Open Settings` 可视化设置面板。普通设置写入 VS Code configuration，API key 写入 VS Code `SecretStorage`，用户不需要直接编辑 `settings.json`。
 
+Target language selection is controlled by a fixed extension language dictionary and rendered as an alphabetically sorted dropdown in the visual settings panel. This avoids sending arbitrary target language strings to traditional machine translation providers.
+
 `docTranslator.output.directoryMode` 当前支持：
 
 - `same-dir`：默认模式，译文作为可见普通文件写在源文件旁边。

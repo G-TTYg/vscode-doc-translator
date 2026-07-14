@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import type { OutputDirectoryMode } from "../core/domain/types";
+import { normalizeTargetLanguageCode, TARGET_LANGUAGES } from "./targetLanguages";
 
 export const SECRET_KEYS = {
   openAiCompatible: "docTranslator.openaiCompatibleApiKey",
@@ -76,7 +77,9 @@ export async function openSettingsPanel(context: vscode.ExtensionContext): Promi
 async function readSettingsState(context: vscode.ExtensionContext): Promise<SettingsState> {
   const config = vscode.workspace.getConfiguration("docTranslator");
   return {
-    defaultTargetLanguage: config.get<string>("defaultTargetLanguage", "zh-CN"),
+    defaultTargetLanguage: normalizeTargetLanguageCode(
+      config.get<string>("defaultTargetLanguage", "zh-CN")
+    ),
     defaultProvider: config.get<string>("defaultProvider", "openai-compatible"),
     outputDirectoryMode: config.get<OutputDirectoryMode>("output.directoryMode", "same-dir"),
     openAfterTranslate: config.get<boolean>("output.openAfterTranslate", true),
@@ -112,7 +115,12 @@ async function saveSettingsState(
   const config = vscode.workspace.getConfiguration("docTranslator");
   const target = vscode.ConfigurationTarget.Global;
 
-  await updateIfDefined(config, "defaultTargetLanguage", values.defaultTargetLanguage, target);
+  await updateIfDefined(
+    config,
+    "defaultTargetLanguage",
+    normalizeTargetLanguageCode(values.defaultTargetLanguage),
+    target
+  );
   await updateIfDefined(config, "defaultProvider", values.defaultProvider, target);
   await updateIfDefined(config, "output.directoryMode", values.outputDirectoryMode, target);
   await updateIfDefined(config, "output.openAfterTranslate", values.openAfterTranslate, target);
@@ -286,9 +294,9 @@ function renderSettingsHtml(state: SettingsState): string {
           <label><span>Translated file location</span><select name="outputDirectoryMode">
             ${outputDirectoryModeOptions(state.outputDirectoryMode)}
           </select></label>
-          <label><span>Target language</span><input name="defaultTargetLanguage" value="${escapeHtml(
-            state.defaultTargetLanguage
-          )}" /></label>
+          <label><span>Target language</span><select name="defaultTargetLanguage">
+            ${targetLanguageOptions(state.defaultTargetLanguage)}
+          </select></label>
           <label><span>Cache directory</span><input name="cacheDirectoryName" value="${escapeHtml(
             state.cacheDirectoryName
           )}" /></label>
@@ -416,6 +424,15 @@ function outputDirectoryModeOptions(selected: OutputDirectoryMode): string {
       return `<option value="${value}" ${isSelected}>${label}</option>`;
     })
     .join("");
+}
+
+function targetLanguageOptions(selected: string): string {
+  return TARGET_LANGUAGES.map((language) => {
+    const isSelected = language.code === selected ? "selected" : "";
+    return `<option value="${escapeHtml(language.code)}" ${isSelected}>${escapeHtml(
+      `${language.label} (${language.code})`
+    )}</option>`;
+  }).join("");
 }
 
 function escapeHtml(value: string): string {
