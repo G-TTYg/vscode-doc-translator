@@ -1,6 +1,5 @@
 export { translateDocument } from "./application/translateDocument";
 export { createProvider } from "./providers/providerFactory";
-export { FakeTranslationProvider } from "./providers/fakeProvider";
 export { OpenAiCompatibleProvider } from "./providers/openAiCompatibleProvider";
 export { DeepLProvider } from "./providers/deeplProvider";
 export { GoogleTranslateProvider } from "./providers/googleProvider";

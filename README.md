@@ -1,22 +1,74 @@
-# VSCode Doc Translator
+# VS Code Doc Translator
 
-VSCode Doc Translator 计划做成一个 VS Code 插件加 CLI：用一次右键命令、命令面板命令或终端命令，快速翻译整份文档，并尽量保留原文档的结构与格式。
+Translate whole documents from VS Code or the command line while preserving supported document structure as much as possible.
 
-当前项目已有第一版 TypeScript 脚手架和可运行的本地 fake 翻译流水线。建议先读：
+VS Code Doc Translator creates a translated copy of your document, keeps the original untouched, and writes verifiable metadata beside the source file. It is designed for quick document translation inside a developer workflow, with provider adapters for OpenAI-compatible LLM APIs, DeepL, Google Cloud Translation, Microsoft Translator, and a local fake provider for smoke tests.
 
-- `docs/design.md`：产品需求、用户流程、缓存命名、翻译服务、路线图和待确认问题。
-- `docs/architecture.md`：模块边界、核心接口、数据流和验证策略。
-- `docs/adr/2026-07-13-shared-core-and-sidecar-cache.md`：第一条已接受的架构决策。
+> Preview status: version 0.1.0 includes the first working VS Code extension, CLI, cache model, format adapters, and provider adapters. External provider adapters require your own credentials and should be validated against your chosen live API before production use.
 
-## 核心思路
+## Features
 
-假设源文件是：
+- Translate the active editor document from the Command Palette or editor context menu.
+- Translate a file from the Explorer context menu.
+- Run the same translation workflow from the CLI.
+- Preserve structure for supported text formats through format adapters instead of raw full-file replacement.
+- Save translated files next to the source document by default, or keep them inside a hidden cache directory.
+- Reuse fresh translations when the source file, target language, provider, output mode, and translated artifact hash still match.
+- Track translation progress in the VS Code status bar.
+- Open the translated file automatically, or open a source/translation diff after translation.
+- Configure provider, target language, output mode, term locks, endpoints, and API keys from a settings webview.
+- Keep provider secrets out of metadata and cache files.
 
-```text
-guide.md
-```
+## Open The Visual Settings Panel
 
-翻译到简体中文后，可能生成：
+The recommended first step is to open the built-in settings panel:
+
+1. Open the VS Code Command Palette with `Ctrl+Shift+P` on Windows/Linux or `Cmd+Shift+P` on macOS.
+2. Run `Doc Translator: Open Settings`.
+3. Choose your translation provider, target language, output location, and provider endpoints.
+4. Paste provider API keys into the password fields when needed. Keys are stored in VS Code SecretStorage.
+5. Click `Save`.
+
+This visual panel is the main place to configure Doc Translator. You normally do not need to edit `settings.json` manually.
+
+## Supported File Types
+
+| Format | Extensions | Current behavior |
+| --- | --- | --- |
+| Markdown | `.md`, `.markdown` | Translates prose while protecting common Markdown structure such as code blocks, inline code, links, images, frontmatter, and table syntax. |
+| MDX | `.mdx` | First-pass conservative adapter that skips import/export/JSX structure lines and translates Markdown text nodes. |
+| HTML/XML | `.html`, `.htm`, `.xml` | Translates text nodes and skips `script` and `style` content. |
+| Plain text | `.txt`, extensionless files, fallback | Translates paragraph-like text while preserving surrounding whitespace and line endings. |
+
+Binary office formats and PDFs are intentionally out of scope for the first release.
+
+## Translation Providers
+
+| Provider ID | Use case | Credential source |
+| --- | --- | --- |
+| `fake` | Local smoke tests and demos without external network calls. | None. |
+| `openai-compatible` | OpenAI-compatible chat/completions endpoints that can return structured JSON. | VS Code SecretStorage, CLI argument, or `DOC_TRANSLATOR_OPENAI_API_KEY`. |
+| `deepl` | DeepL API translation. | VS Code SecretStorage, CLI argument, or `DOC_TRANSLATOR_DEEPL_API_KEY`. |
+| `google` | Google Cloud Translation API. | VS Code SecretStorage, CLI argument, or `DOC_TRANSLATOR_GOOGLE_API_KEY`. |
+| `microsoft` | Microsoft Translator / Azure AI Translator. | VS Code SecretStorage, CLI argument, or `DOC_TRANSLATOR_MICROSOFT_API_KEY`. |
+
+Traditional machine translation providers receive segmented translation units. OpenAI-compatible LLM providers receive an ordered JSON reference document with stable unit IDs and must return a flat JSON list of translated unit IDs. Final document reconstruction always stays inside the format adapter.
+
+## Quick Start
+
+1. Install the extension in VS Code.
+2. Open the Command Palette with `Ctrl+Shift+P` or `Cmd+Shift+P`, then run `Doc Translator: Open Settings`.
+3. Choose a provider and target language.
+4. For a real provider, enter the required API key in the settings panel. Keys are stored in VS Code SecretStorage.
+5. Open a local document and run `Doc Translator: Translate Current Document`.
+
+You can also right-click a file in the Explorer and choose `Doc Translator: Translate Document`.
+
+The default provider is `fake` so the extension can be tested immediately without credentials. For real translation, switch to `openai-compatible`, `deepl`, `google`, or `microsoft`.
+
+## Output And Cache
+
+By default, translating `guide.md` to Simplified Chinese creates a visible translated file next to the source:
 
 ```text
 guide.md
@@ -25,42 +77,49 @@ guide.auto.zh-CN.20260713T150245Z.md
   guide.auto.zh-CN.20260713T150245Z.src-2c26b46b.dst-a3f9d9e1.meta.json
 ```
 
-翻译后的文档是普通文件，可以直接在 VS Code 中打开。隐藏的 metadata/cache 文件记录源文件 hash、译文文件 hash、翻译服务、目标语言、格式适配器版本和新鲜度信息。
+If `docTranslator.output.directoryMode` is set to `hidden-cache`, both the translated file and metadata sidecar are written inside `.vscode-doc-translator-cache/`.
 
-如果不想在源目录看到译文文件，可以把输出位置设为 `hidden-cache`。此时译文文件和 metadata 都会写入 `.vscode-doc-translator-cache/`，VS Code 仍会直接打开该译文文件。
+Cache reuse is hash-based. A cached translation is reused only when the source hash, target language, provider, output mode, and translated file hash still match. If the source file changes, a new translated artifact is created. If the translated artifact was edited, the extension avoids treating it as a fresh cache hit.
 
-## 当前状态
+## VS Code Settings
 
-- 产品和架构设计：已起草。
-- 共享 core：已实现第一版 `translateDocument` 流水线、命名、hash、metadata/cache 写入和新鲜度复用。
-- 文件格式：已实现 plain text、语法感知 Markdown、保守 MDX、HTML/XML text-node adapter。
-- Provider：已实现本地 `fake`、OpenAI-compatible、DeepL、Google、Microsoft provider 适配器。
-- 大文件 AI：OpenAI-compatible provider 会按模型 `maxContextTokens` 和单次 `maxOutputTokens` 分段。每个请求用 `referenceDocument` 提供预算内最大的滑动参考上下文，用 `translationUnitIds` 指定真正要翻译的 id，并把 `maxOutputTokens` 作为 API `max_tokens` 发送；多次请求后合并 flat JSON 译文。
-- Phase 2 质量项：已支持 term locks，已支持 VS Code source/translation diff preview。
-- 输出位置：默认在源文件旁写可见译文；也支持 `hidden-cache`，把译文放入隐藏缓存目录。
-- 缓存行为：如果源文件 hash、目标语言、provider、输出模式和译文 hash 都匹配，则直接复用缓存并打开已有译文；源文件更新后 hash 改变，会重新翻译并生成新的译文。
-- 入口：已实现 CLI、VS Code extension 命令注册和 Doc Translator Settings 可视化设置面板，可在面板中选择翻译 provider 和输出位置。
-- VS Code 状态栏：翻译任务运行时在右下角显示运行中、阶段进度和百分比；缓存命中、成功、失败会显示对应状态，成功/缓存状态可点击打开最近译文。
-- 测试：已添加 Vitest 测试。
+Most settings can be changed from the visual panel opened by `Doc Translator: Open Settings`.
 
-## 开发命令
+| Setting | Default | Description |
+| --- | --- | --- |
+| `docTranslator.defaultTargetLanguage` | `zh-CN` | Target language used by VS Code commands. |
+| `docTranslator.defaultProvider` | `fake` | Provider ID: `fake`, `openai-compatible`, `deepl`, `google`, or `microsoft`. |
+| `docTranslator.output.directoryMode` | `same-dir` | `same-dir` writes translated files beside the source; `hidden-cache` writes them into the cache directory. |
+| `docTranslator.output.openAfterTranslate` | `true` | Open the translated file after translation. |
+| `docTranslator.output.showDiffAfterTranslate` | `false` | Open a VS Code diff between the source and translated files. |
+| `docTranslator.termLocks` | `[]` | Terms that must remain untranslated. |
+| `docTranslator.cache.hiddenDirectoryName` | `.vscode-doc-translator-cache` | Metadata/cache directory written next to the source document. |
+| `docTranslator.llm.endpoint` | `https://api.openai.com/v1` | OpenAI-compatible API base URL. |
+| `docTranslator.llm.model` | empty | Model name for the OpenAI-compatible provider. |
+| `docTranslator.llm.maxContextTokens` | `128000` | Model context budget used for LLM request chunking. |
+| `docTranslator.llm.maxOutputTokens` | `4096` | Maximum response tokens requested per LLM call. |
+| `docTranslator.deepl.endpoint` | `https://api-free.deepl.com` | DeepL API base URL. |
+| `docTranslator.google.endpoint` | `https://translation.googleapis.com` | Google Cloud Translation API base URL. |
+| `docTranslator.microsoft.endpoint` | `https://api.cognitive.microsofttranslator.com` | Microsoft Translator API base URL. |
+| `docTranslator.microsoft.region` | empty | Microsoft Translator region, when required by the resource. |
+| `docTranslator.markdown.insertAutoTranslationHeader` | `false` | Insert a short auto-translation comment in Markdown outputs. |
+
+## CLI Usage
+
+The CLI uses the same core translation pipeline as the VS Code extension.
 
 ```bash
-npm install
-npm run compile
-npm test
-npm run check
-npm run package:vsix
+vscode-doc-translator translate ./guide.md --to zh-CN --provider fake
 ```
 
-CLI 本地烟测：
+When running from a local build:
 
 ```bash
 node dist/cli/main.js translate ./guide.md --to zh-CN --provider fake
 node dist/cli/main.js translate ./guide.md --to zh-CN --provider fake --output hidden-cache
 ```
 
-OpenAI-compatible provider 需要设置：
+OpenAI-compatible example:
 
 ```bash
 set DOC_TRANSLATOR_OPENAI_API_KEY=...
@@ -69,15 +128,13 @@ set DOC_TRANSLATOR_OPENAI_ENDPOINT=https://api.openai.com/v1
 node dist/cli/main.js translate ./guide.md --to zh-CN --provider openai-compatible
 ```
 
-AI 大文件分块可设置：
+Large LLM documents can be chunked with explicit token budgets:
 
 ```bash
 node dist/cli/main.js translate ./guide.md --to zh-CN --provider openai-compatible --llm-max-context-tokens 128000 --llm-max-output-tokens 4096
 ```
 
-兼容旧脚本的 `--llm-max-context-chars` 仍可用，但新配置应优先使用 token 预算。
-
-传统 provider 环境变量：
+Other provider environment variables:
 
 ```bash
 set DOC_TRANSLATOR_DEEPL_API_KEY=...
@@ -86,14 +143,29 @@ set DOC_TRANSLATOR_MICROSOFT_API_KEY=...
 set DOC_TRANSLATOR_MICROSOFT_REGION=...
 ```
 
-VS Code 插件开发可运行 `npm run compile` 后使用 `.vscode/launch.json` 的 `Run Extension`。
+Useful CLI options:
 
-在 VS Code 中运行 `Doc Translator: Open Settings` 可以打开可视化设置面板；普通设置写入 VS Code settings，API key 写入 VS Code SecretStorage。
-
-导出插件包：
-
-```bash
-npm run package:vsix
+```text
+--from auto
+--to zh-CN
+--provider fake|openai-compatible|deepl|google|microsoft
+--output same-dir|hidden-cache
+--term-locks OpenAI,VS Code
+--force
+--json
+--insert-markdown-header
 ```
 
-生成的 VSIX 文件名为 `vscode-doc-translator-0.1.0.vsix`。
+## Privacy And Security
+
+Document content is sent to the provider you choose, except when using the local `fake` provider. Review your provider's data policy before translating sensitive documents.
+
+API keys and bearer tokens are not written to metadata, cache files, or normal logs. In VS Code, provider keys are stored in SecretStorage. In the CLI, prefer environment variables over command-line arguments when possible.
+
+## Known Limitations
+
+- DeepL, Google, Microsoft, and OpenAI-compatible adapters are implemented, but live API behavior depends on your credentials, endpoint, region, model, and provider compatibility.
+- The Markdown and MDX adapters are first-pass syntax-aware adapters, not full-fidelity parsers for every edge case.
+- LLM token budgeting uses an approximation rather than a provider-specific tokenizer.
+- Very large individual translation units may still exceed an input or output budget.
+- Cancellation, resume, segment-level cache, and extension-host automated smoke tests are planned future work.

@@ -1,17 +1,20 @@
-import type { TranslateRequest, TranslateResult, TranslationProvider } from "../domain/types";
+import type {
+  TranslateRequest,
+  TranslateResult,
+  TranslationProvider
+} from "../src/core/domain/types";
 
-export class FakeTranslationProvider implements TranslationProvider {
-  readonly id = "fake";
-  readonly displayName = "Fake local provider";
+export class PrefixTranslationProvider implements TranslationProvider {
+  readonly id = "test-prefix";
+  readonly displayName = "Test prefix provider";
   readonly capabilities = {
     requestPackaging: "segmented-units" as const,
     supportsStructuredJsonOutput: true
   };
 
   async translateBatch(request: TranslateRequest): Promise<TranslateResult> {
-    const sourceUnits = request.orderedContext?.units ?? request.units;
     return {
-      translations: sourceUnits.map((unit) => ({
+      translations: request.units.map((unit) => ({
         id: unit.id,
         text: `[${request.targetLanguage}] ${unit.sourceText}`
       })),

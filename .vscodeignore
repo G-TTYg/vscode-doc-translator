@@ -6,9 +6,11 @@ src/**
 tests/**
 docs/**
 logs/**
+media/**
 .vscode-test/**
 coverage/**
 .vscode-doc-translator-cache/**
+*.auto.*
 *.vsix
 AGENTS.md
 package-lock.json

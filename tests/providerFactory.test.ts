@@ -3,7 +3,6 @@ import { createProvider } from "../src/core/providers/providerFactory";
 
 describe("provider factory", () => {
   it("creates all configured provider families", () => {
-    expect(createProvider({ providerId: "fake" }).id).toBe("fake");
     expect(
       createProvider({
         providerId: "openai-compatible",

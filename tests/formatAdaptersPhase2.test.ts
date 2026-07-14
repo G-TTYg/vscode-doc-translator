@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { translateDocument } from "../src/core/application/translateDocument";
-import { FakeTranslationProvider } from "../src/core/providers/fakeProvider";
+import { PrefixTranslationProvider } from "./testTranslationProvider";
 
 let tempDir: string;
 
@@ -35,7 +35,7 @@ describe("Phase 2 format adapters", () => {
     const result = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-14T10:00:00Z")
     });
 
@@ -66,7 +66,7 @@ describe("Phase 2 format adapters", () => {
     const result = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-14T10:00:00Z")
     });
 

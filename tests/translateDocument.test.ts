@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { translateDocument } from "../src/core/application/translateDocument";
 import type { TranslationProgressStage } from "../src/core/domain/types";
-import { FakeTranslationProvider } from "../src/core/providers/fakeProvider";
+import { PrefixTranslationProvider } from "./testTranslationProvider";
 
 let tempDir: string;
 
@@ -24,7 +24,7 @@ describe("translateDocument", () => {
     const first = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-13T15:02:45Z")
     });
 
@@ -51,7 +51,7 @@ describe("translateDocument", () => {
     const second = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-13T16:00:00Z")
     });
 
@@ -66,14 +66,14 @@ describe("translateDocument", () => {
     const visible = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-13T15:02:45Z")
     });
 
     const hidden = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       outputDirectoryMode: "hidden-cache",
       now: new Date("2026-07-13T16:00:00Z")
     });
@@ -91,7 +91,7 @@ describe("translateDocument", () => {
     const cachedHidden = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       outputDirectoryMode: "hidden-cache",
       now: new Date("2026-07-13T17:00:00Z")
     });
@@ -108,7 +108,7 @@ describe("translateDocument", () => {
     await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-13T15:02:45Z"),
       onProgress: (progress) => translatedStages.push(progress.stage)
     });
@@ -127,7 +127,7 @@ describe("translateDocument", () => {
     await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-13T16:00:00Z"),
       onProgress: (progress) => cachedStages.push(progress.stage)
     });
@@ -142,7 +142,7 @@ describe("translateDocument", () => {
     const first = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-13T15:02:45Z")
     });
 
@@ -151,7 +151,7 @@ describe("translateDocument", () => {
     const second = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-13T16:00:00Z")
     });
 
@@ -191,7 +191,7 @@ describe("translateDocument", () => {
     const result = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-13T15:02:45Z"),
       insertMarkdownHeader: true
     });
@@ -214,7 +214,7 @@ describe("translateDocument", () => {
     const result = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-13T15:02:45Z"),
       termLocks: ["OpenAI", "VS Code"]
     });
@@ -232,7 +232,7 @@ describe("translateDocument", () => {
     const result = await translateDocument({
       sourcePath,
       targetLanguage: "zh-CN",
-      provider: new FakeTranslationProvider(),
+      provider: new PrefixTranslationProvider(),
       now: new Date("2026-07-13T15:02:45Z")
     });
 

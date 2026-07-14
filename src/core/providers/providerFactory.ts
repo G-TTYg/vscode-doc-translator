@@ -1,4 +1,3 @@
-import { FakeTranslationProvider } from "./fakeProvider";
 import { DeepLProvider, type DeepLProviderOptions } from "./deeplProvider";
 import { GoogleTranslateProvider, type GoogleTranslateProviderOptions } from "./googleProvider";
 import {
@@ -21,8 +20,6 @@ export interface ProviderFactoryOptions {
 
 export function createProvider(options: ProviderFactoryOptions): TranslationProvider {
   switch (options.providerId) {
-    case "fake":
-      return new FakeTranslationProvider();
     case "deepl":
       return new DeepLProvider({
         apiKey: options.deepl?.apiKey ?? process.env.DOC_TRANSLATOR_DEEPL_API_KEY ?? "",

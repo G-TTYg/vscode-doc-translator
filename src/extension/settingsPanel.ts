@@ -77,7 +77,7 @@ async function readSettingsState(context: vscode.ExtensionContext): Promise<Sett
   const config = vscode.workspace.getConfiguration("docTranslator");
   return {
     defaultTargetLanguage: config.get<string>("defaultTargetLanguage", "zh-CN"),
-    defaultProvider: config.get<string>("defaultProvider", "fake"),
+    defaultProvider: config.get<string>("defaultProvider", "openai-compatible"),
     outputDirectoryMode: config.get<OutputDirectoryMode>("output.directoryMode", "same-dir"),
     openAfterTranslate: config.get<boolean>("output.openAfterTranslate", true),
     showDiffAfterTranslate: config.get<boolean>("output.showDiffAfterTranslate", false),
@@ -398,7 +398,7 @@ function renderSettingsHtml(state: SettingsState): string {
 }
 
 function providerOptions(selected: string): string {
-  return ["fake", "openai-compatible", "deepl", "google", "microsoft"]
+  return ["openai-compatible", "deepl", "google", "microsoft"]
     .map((provider) => {
       const isSelected = provider === selected ? "selected" : "";
       return `<option value="${provider}" ${isSelected}>${provider}</option>`;

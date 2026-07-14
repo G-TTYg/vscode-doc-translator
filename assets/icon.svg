@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">VS Code Doc Translator</title>
+  <desc id="description">A document with an A to language glyph translation mark.</desc>
+  <rect width="512" height="512" rx="96" fill="#14263D"/>
+  <path d="M152 84H318L392 158V394C392 416.091 374.091 434 352 434H152C129.909 434 112 416.091 112 394V124C112 101.909 129.909 84 152 84Z" fill="#0C1828" opacity=".34" transform="translate(8 10)"/>
+  <path d="M152 84H318L392 158V394C392 416.091 374.091 434 352 434H152C129.909 434 112 416.091 112 394V124C112 101.909 129.909 84 152 84Z" fill="#F7FAFF"/>
+  <path d="M318 84V132C318 146.359 329.641 158 344 158H392L318 84Z" fill="#BCE8E0"/>
+  <path d="M164 164H270" stroke="#C8D6E5" stroke-width="16" stroke-linecap="round"/>
+  <path d="M164 198H244" stroke="#D8E2EE" stroke-width="14" stroke-linecap="round"/>
+  <path d="M164 232H224" stroke="#D8E2EE" stroke-width="14" stroke-linecap="round"/>
+  <path d="M166 346L198 266L230 346M180 315H216" fill="none" stroke="#263D57" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M282 256H352M317 224V234M282 286L352 348M352 286L282 348" fill="none" stroke="#1AA78E" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M238 307H269" fill="none" stroke="#F0AE4D" stroke-width="14" stroke-linecap="round"/>
+  <path d="M258 288L278 307L258 326" fill="none" stroke="#F0AE4D" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M166 382H338" stroke="#D8E2EE" stroke-width="14" stroke-linecap="round"/>
+</svg>

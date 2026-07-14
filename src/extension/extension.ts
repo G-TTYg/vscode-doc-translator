@@ -63,7 +63,7 @@ async function runTranslate(
 
   const config = vscode.workspace.getConfiguration("docTranslator");
   const targetLanguage = config.get<string>("defaultTargetLanguage", "zh-CN");
-  const providerId = config.get<string>("defaultProvider", "fake");
+  const providerId = config.get<string>("defaultProvider", "openai-compatible");
   const cacheDirectoryName = config.get<string>(
     "cache.hiddenDirectoryName",
     ".vscode-doc-translator-cache"

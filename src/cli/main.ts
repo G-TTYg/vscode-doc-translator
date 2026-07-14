@@ -117,7 +117,7 @@ function parseArgs(argv: readonly string[]): CliOptions {
     sourcePath,
     targetLanguage: stringOption(options, "to", "zh-CN"),
     sourceLanguage: stringOption(options, "from", "auto") as string | "auto",
-    providerId: stringOption(options, "provider", "fake"),
+    providerId: stringOption(options, "provider", "openai-compatible"),
     force: Boolean(options.force),
     json: Boolean(options.json),
     insertMarkdownHeader: Boolean(options["insert-markdown-header"]),
@@ -187,7 +187,7 @@ function splitCsvOption(options: Record<string, string | boolean>, key: string):
 
 function printUsage(): void {
   process.stderr.write(`Usage:
-  vscode-doc-translator translate <file> --to zh-CN [--from auto] [--provider fake|openai-compatible|deepl|google|microsoft]
+  vscode-doc-translator translate <file> --to zh-CN [--from auto] [--provider openai-compatible|deepl|google|microsoft]
 
 Options:
   --force                    Create a new translation even when a fresh cached artifact exists.

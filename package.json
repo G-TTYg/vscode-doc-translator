@@ -3,7 +3,8 @@
   "displayName": "VSCode Doc Translator",
   "description": "Translate whole documents from VS Code or CLI while preserving supported document structure.",
   "version": "0.1.0",
-  "publisher": "g-tty",
+  "publisher": "vscode-doc-translator",
+  "icon": "assets/icon.png",
   "private": true,
   "license": "MIT",
   "main": "./dist/extension/extension.js",
@@ -69,14 +70,13 @@
         "docTranslator.defaultProvider": {
           "type": "string",
           "enum": [
-            "fake",
             "openai-compatible",
             "deepl",
             "google",
             "microsoft"
           ],
-          "default": "fake",
-          "description": "Default translation provider. fake is for local smoke testing."
+          "default": "openai-compatible",
+          "description": "Default translation provider."
         },
         "docTranslator.cache.hiddenDirectoryName": {
           "type": "string",
