@@ -7,7 +7,7 @@
 
 ## Project Purpose
 
-- This project will build a VS Code document translator that can translate a whole document from the editor context menu, explorer context menu, command palette, or CLI while preserving document structure and formatting as much as possible.
+- This project builds a VS Code document translator that can translate a whole document from the editor context menu, explorer context menu, or command palette while preserving document structure and formatting as much as possible.
 - The translator will support multiple backends through adapters: Google Translation API, DeepL API, Microsoft Translator, and OpenAI-compatible LLM APIs.
 - The translator will save a translated copy and a coupled hidden sidecar under `.vscode-doc-translator-cache/` next to the source document so VS Code can open the translated copy as a normal file.
 - Non-goals for the first implementation: arbitrary binary office/PDF fidelity, machine translation account management, and replacing dedicated CAT/TMS tools.
@@ -32,7 +32,6 @@
 - `src/core/formats/` - plain text and Markdown format adapters.
 - `src/core/providers/` - provider boundary, OpenAI-compatible/DeepL/Google/Microsoft providers, batching helpers.
 - `src/core/application/` - `translateDocument` use case and metadata/cache store.
-- `src/cli/` - CLI entrypoint.
 - `src/extension/` - VS Code extension entrypoint and settings webview.
 - `tests/` - Vitest unit/integration tests.
 
@@ -42,15 +41,12 @@
 - Compile: `npm run compile`
 - Test: `npm test`
 - Check: `npm run check`
-- CLI smoke (requires provider credentials): `node dist/cli/main.js translate <file> --to zh-CN --provider openai-compatible`
-- CLI hidden output smoke (requires provider credentials): `node dist/cli/main.js translate <file> --to zh-CN --provider openai-compatible --output hidden-cache`
-- AI large-file smoke: `node dist/cli/main.js translate <file> --to zh-CN --provider openai-compatible --llm-max-context-tokens 128000 --llm-max-output-tokens 4096`
 - Build/package: `npm run package:vsix`
 
 ## Architecture Rules
 
-- Keep VS Code UI, CLI entrypoints, application workflows, domain rules, provider adapters, format adapters, and persistence/cache concerns separate.
-- Shared translation behavior must live in reusable core modules consumed by both the VS Code extension and CLI.
+- Keep VS Code UI, application workflows, domain rules, provider adapters, format adapters, and persistence/cache concerns separate.
+- Shared translation behavior must live in reusable core modules consumed by the VS Code extension.
 - Provider-specific details must stay behind translation provider interfaces.
 - File-format-specific parsing and reconstruction must stay behind document format adapter interfaces.
 - Traditional machine translation providers should receive segmented translation units. AI/LLM providers may receive an ordered JSON representation of the full extracted document context, with stable IDs, but must return a flat JSON mapping from IDs to translations.

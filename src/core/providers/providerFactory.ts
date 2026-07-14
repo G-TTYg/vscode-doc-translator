@@ -22,52 +22,33 @@ export function createProvider(options: ProviderFactoryOptions): TranslationProv
   switch (options.providerId) {
     case "deepl":
       return new DeepLProvider({
-        apiKey: options.deepl?.apiKey ?? process.env.DOC_TRANSLATOR_DEEPL_API_KEY ?? "",
-        endpoint: options.deepl?.endpoint ?? process.env.DOC_TRANSLATOR_DEEPL_ENDPOINT,
+        apiKey: options.deepl?.apiKey ?? "",
+        endpoint: options.deepl?.endpoint,
         maxBatchCharacters: options.deepl?.maxBatchCharacters
       });
     case "google":
       return new GoogleTranslateProvider({
-        apiKey: options.google?.apiKey ?? process.env.DOC_TRANSLATOR_GOOGLE_API_KEY ?? "",
-        endpoint: options.google?.endpoint ?? process.env.DOC_TRANSLATOR_GOOGLE_ENDPOINT,
+        apiKey: options.google?.apiKey ?? "",
+        endpoint: options.google?.endpoint,
         maxBatchCharacters: options.google?.maxBatchCharacters
       });
     case "microsoft":
       return new MicrosoftTranslatorProvider({
-        apiKey:
-          options.microsoft?.apiKey ?? process.env.DOC_TRANSLATOR_MICROSOFT_API_KEY ?? "",
-        region: options.microsoft?.region ?? process.env.DOC_TRANSLATOR_MICROSOFT_REGION,
-        endpoint:
-          options.microsoft?.endpoint ?? process.env.DOC_TRANSLATOR_MICROSOFT_ENDPOINT,
+        apiKey: options.microsoft?.apiKey ?? "",
+        region: options.microsoft?.region,
+        endpoint: options.microsoft?.endpoint,
         maxBatchCharacters: options.microsoft?.maxBatchCharacters
       });
     case "openai-compatible":
       return new OpenAiCompatibleProvider({
-        endpoint:
-          options.openAiCompatible?.endpoint ??
-          process.env.DOC_TRANSLATOR_OPENAI_ENDPOINT ??
-          "https://api.openai.com/v1",
-        apiKey: options.openAiCompatible?.apiKey ?? process.env.DOC_TRANSLATOR_OPENAI_API_KEY ?? "",
-        model: options.openAiCompatible?.model ?? process.env.DOC_TRANSLATOR_OPENAI_MODEL ?? "",
-        maxContextTokens:
-          options.openAiCompatible?.maxContextTokens ??
-          parseOptionalInt(process.env.DOC_TRANSLATOR_OPENAI_MAX_CONTEXT_TOKENS),
-        maxOutputTokens:
-          options.openAiCompatible?.maxOutputTokens ??
-          parseOptionalInt(process.env.DOC_TRANSLATOR_OPENAI_MAX_OUTPUT_TOKENS),
-        maxContextCharacters:
-          options.openAiCompatible?.maxContextCharacters ??
-          parseOptionalInt(process.env.DOC_TRANSLATOR_OPENAI_MAX_CONTEXT_CHARS)
+        endpoint: options.openAiCompatible?.endpoint ?? "https://api.openai.com/v1",
+        apiKey: options.openAiCompatible?.apiKey ?? "",
+        model: options.openAiCompatible?.model ?? "",
+        maxContextTokens: options.openAiCompatible?.maxContextTokens,
+        maxOutputTokens: options.openAiCompatible?.maxOutputTokens,
+        maxContextCharacters: options.openAiCompatible?.maxContextCharacters
       });
     default:
       throw new Error(`Unsupported provider: ${options.providerId}`);
   }
-}
-
-function parseOptionalInt(value: string | undefined): number | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : undefined;
 }
