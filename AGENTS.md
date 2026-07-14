@@ -45,7 +45,7 @@
 - CLI smoke: `node dist/cli/main.js translate <file> --to zh-CN --provider fake`
 - CLI hidden output smoke: `node dist/cli/main.js translate <file> --to zh-CN --provider fake --output hidden-cache`
 - AI large-file smoke: `node dist/cli/main.js translate <file> --to zh-CN --provider openai-compatible --llm-max-context-tokens 128000 --llm-max-output-tokens 4096`
-- Build/package: TBD
+- Build/package: `npm run package:vsix`
 
 ## Architecture Rules
 

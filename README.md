@@ -49,6 +49,7 @@ npm install
 npm run compile
 npm test
 npm run check
+npm run package:vsix
 ```
 
 CLI 本地烟测：
@@ -87,3 +88,11 @@ set DOC_TRANSLATOR_MICROSOFT_REGION=...
 VS Code 插件开发可运行 `npm run compile` 后使用 `.vscode/launch.json` 的 `Run Extension`。
 
 在 VS Code 中运行 `Doc Translator: Open Settings` 可以打开可视化设置面板；普通设置写入 VS Code settings，API key 写入 VS Code SecretStorage。
+
+导出插件包：
+
+```bash
+npm run package:vsix
+```
+
+生成的 VSIX 文件名为 `vscode-doc-translator-0.1.0.vsix`。
