@@ -1,0 +1,182 @@
+{
+  "name": "vscode-doc-translator",
+  "displayName": "VSCode Doc Translator",
+  "description": "Translate whole documents from VS Code or CLI while preserving supported document structure.",
+  "version": "0.1.0",
+  "publisher": "g-tty",
+  "private": true,
+  "license": "MIT",
+  "main": "./dist/extension/extension.js",
+  "bin": {
+    "vscode-doc-translator": "./dist/cli/main.js"
+  },
+  "engines": {
+    "vscode": "^1.90.0",
+    "node": ">=20"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:docTranslator.translateCurrentDocument",
+    "onCommand:docTranslator.translateFile",
+    "onCommand:docTranslator.setOpenAiCompatibleApiKey",
+    "onCommand:docTranslator.openSettings"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "docTranslator.translateCurrentDocument",
+        "title": "Doc Translator: Translate Current Document"
+      },
+      {
+        "command": "docTranslator.translateFile",
+        "title": "Doc Translator: Translate Document"
+      },
+      {
+        "command": "docTranslator.setOpenAiCompatibleApiKey",
+        "title": "Doc Translator: Set OpenAI-Compatible API Key"
+      },
+      {
+        "command": "docTranslator.openSettings",
+        "title": "Doc Translator: Open Settings"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "docTranslator.translateCurrentDocument",
+          "group": "navigation@90",
+          "when": "resourceScheme == file"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "docTranslator.translateFile",
+          "group": "navigation@90",
+          "when": "resourceScheme == file"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Doc Translator",
+      "properties": {
+        "docTranslator.defaultTargetLanguage": {
+          "type": "string",
+          "default": "zh-CN",
+          "description": "Default target language for document translation."
+        },
+        "docTranslator.defaultProvider": {
+          "type": "string",
+          "enum": [
+            "fake",
+            "openai-compatible",
+            "deepl",
+            "google",
+            "microsoft"
+          ],
+          "default": "fake",
+          "description": "Default translation provider. fake is for local smoke testing."
+        },
+        "docTranslator.cache.hiddenDirectoryName": {
+          "type": "string",
+          "default": ".vscode-doc-translator-cache",
+          "description": "Hidden sidecar directory name written next to the source document."
+        },
+        "docTranslator.output.directoryMode": {
+          "type": "string",
+          "enum": [
+            "same-dir",
+            "hidden-cache"
+          ],
+          "default": "same-dir",
+          "description": "Where translated documents are written. same-dir writes next to the source file; hidden-cache writes them inside the hidden cache directory."
+        },
+        "docTranslator.output.openAfterTranslate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the translated document after translation."
+        },
+        "docTranslator.output.showDiffAfterTranslate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open a source/translation diff after translation."
+        },
+        "docTranslator.termLocks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Terms that must remain untranslated."
+        },
+        "docTranslator.llm.endpoint": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "OpenAI-compatible API base URL."
+        },
+        "docTranslator.llm.model": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI-compatible model name."
+        },
+        "docTranslator.llm.maxContextTokens": {
+          "type": "number",
+          "default": 128000,
+          "minimum": 1000,
+          "description": "Model maximum context window in tokens."
+        },
+        "docTranslator.llm.maxOutputTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 256,
+          "description": "Maximum tokens requested for each LLM response."
+        },
+        "docTranslator.llm.maxContextCharacters": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Deprecated compatibility setting. Prefer docTranslator.llm.maxContextTokens."
+        },
+        "docTranslator.deepl.endpoint": {
+          "type": "string",
+          "default": "https://api-free.deepl.com",
+          "description": "DeepL API base URL."
+        },
+        "docTranslator.google.endpoint": {
+          "type": "string",
+          "default": "https://translation.googleapis.com",
+          "description": "Google Cloud Translation API base URL."
+        },
+        "docTranslator.microsoft.endpoint": {
+          "type": "string",
+          "default": "https://api.cognitive.microsofttranslator.com",
+          "description": "Microsoft Translator API base URL."
+        },
+        "docTranslator.microsoft.region": {
+          "type": "string",
+          "default": "",
+          "description": "Microsoft Translator resource region, when required."
+        },
+        "docTranslator.markdown.insertAutoTranslationHeader": {
+          "type": "boolean",
+          "default": false,
+          "description": "Insert a short HTML comment header in translated Markdown files."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "check": "npm run compile && npm test",
+    "package:vsix": "vsce package --allow-missing-repository --out vscode-doc-translator-0.1.0.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.9.2",
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.10"
+  }
+}

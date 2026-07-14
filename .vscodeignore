@@ -1,0 +1,16 @@
+.git/**
+.vscode/**
+node_modules/**
+src/**
+tests/**
+docs/**
+logs/**
+.vscode-test/**
+coverage/**
+.vscode-doc-translator-cache/**
+*.vsix
+AGENTS.md
+package-lock.json
+tsconfig.json
+vitest.config.ts
+*.map
