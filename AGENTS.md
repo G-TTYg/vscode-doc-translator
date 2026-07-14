@@ -30,7 +30,7 @@
 - `logs/` - dated project-local work logs and handoff notes.
 - `src/core/domain/` - shared contracts, naming, hashing, protected-token utilities.
 - `src/core/formats/` - plain text and Markdown format adapters.
-- `src/core/providers/` - provider boundary, fake/OpenAI-compatible/DeepL/Google/Microsoft providers, batching helpers.
+- `src/core/providers/` - provider boundary, OpenAI-compatible/DeepL/Google/Microsoft providers, batching helpers.
 - `src/core/application/` - `translateDocument` use case and metadata/cache store.
 - `src/cli/` - CLI entrypoint.
 - `src/extension/` - VS Code extension entrypoint and settings webview.
@@ -42,8 +42,8 @@
 - Compile: `npm run compile`
 - Test: `npm test`
 - Check: `npm run check`
-- CLI smoke: `node dist/cli/main.js translate <file> --to zh-CN --provider fake`
-- CLI hidden output smoke: `node dist/cli/main.js translate <file> --to zh-CN --provider fake --output hidden-cache`
+- CLI smoke (requires provider credentials): `node dist/cli/main.js translate <file> --to zh-CN --provider openai-compatible`
+- CLI hidden output smoke (requires provider credentials): `node dist/cli/main.js translate <file> --to zh-CN --provider openai-compatible --output hidden-cache`
 - AI large-file smoke: `node dist/cli/main.js translate <file> --to zh-CN --provider openai-compatible --llm-max-context-tokens 128000 --llm-max-output-tokens 4096`
 - Build/package: `npm run package:vsix`
 

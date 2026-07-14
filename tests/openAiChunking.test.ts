@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   type AiSegmentationBudget,
   OpenAiCompatibleProvider,
-  chunkOrderedDocumentContext
+  chunkOrderedDocumentContext,
+  parseTranslations
 } from "../src/core/providers/openAiCompatibleProvider";
 import type { OrderedDocumentContext } from "../src/core/domain/types";
 
@@ -37,7 +38,7 @@ describe("OpenAI-compatible chunking", () => {
       "f".repeat(180)
     ]);
 
-    const chunks = chunkOrderedDocumentContext(context, 1600);
+    const chunks = chunkOrderedDocumentContext(context, 2000);
     const chunkWithReference = chunks.find(
       (chunk) => chunk.context.units.length > chunk.translationUnitIds.length
     );
@@ -136,6 +137,90 @@ describe("OpenAI-compatible chunking", () => {
     ]);
     expect(referenceUnitCounts.some((count, index) => count > targetUnitCounts[index])).toBe(true);
     expect(result.translations.map((translation) => translation.id)).toEqual(requestedTranslationIds);
+  });
+
+  it("recovers wrapped JSON responses and supports explicit skip items", () => {
+    const translations = parseTranslations(
+      [
+        "Here is the JSON:",
+        "```json",
+        "{",
+        "  \"translations\": [",
+        "    { \"id\": \"unit-0\", \"text\": \"translated\" },",
+        "    { \"id\": \"unit-1\", \"skip\": true },",
+        "  ]",
+        "}",
+        "```"
+      ].join("\n"),
+      new Map([["unit-1", "Keep as-is"]])
+    );
+
+    expect(translations).toEqual([
+      { id: "unit-0", text: "translated" },
+      { id: "unit-1", text: "Keep as-is" }
+    ]);
+  });
+
+  it("retries only missing translation ids and merges the repair response", async () => {
+    const requestedBatches: string[][] = [];
+    const provider = new OpenAiCompatibleProvider({
+      endpoint: "https://example.test/v1",
+      apiKey: "test-key",
+      model: "test-model",
+      maxContextTokens: 8000,
+      maxOutputTokens: 1024,
+      charactersPerToken: 2,
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          messages: Array<{ role: string; content: string }>;
+        };
+        const userMessage = body.messages.find((message) => message.role === "user");
+        const request = JSON.parse(userMessage?.content ?? "{}") as {
+          translationUnitIds: string[];
+        };
+        requestedBatches.push(request.translationUnitIds);
+        const translations =
+          requestedBatches.length === 1
+            ? [{ id: "unit-0", text: "translated unit-0" }]
+            : [
+                { id: "unit-1", text: "repaired unit-1" },
+                { id: "unit-2", skip: true }
+              ];
+
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({ translations })
+                }
+              }
+            ]
+          }),
+          { status: 200 }
+        );
+      }
+    });
+
+    const context = createContext(["first", "second", "third"]);
+    const result = await provider.translateBatch({
+      sourceLanguage: "auto",
+      targetLanguage: "zh-CN",
+      units: context.units,
+      orderedContext: context
+    });
+
+    expect(requestedBatches).toEqual([
+      ["unit-0", "unit-1", "unit-2"],
+      ["unit-1", "unit-2"]
+    ]);
+    expect(result.requestCount).toBe(2);
+    expect(result.warnings.join("\n")).toContain("retrying missing unit(s): unit-1, unit-2");
+    expect(result.translations).toEqual([
+      { id: "unit-0", text: "translated unit-0" },
+      { id: "unit-1", text: "repaired unit-1" },
+      { id: "unit-2", text: "third" }
+    ]);
   });
 });
 

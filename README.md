@@ -2,7 +2,7 @@
 
 Translate whole documents from VS Code or the command line while preserving supported document structure as much as possible.
 
-VS Code Doc Translator creates a translated copy of your document, keeps the original untouched, and writes verifiable metadata beside the source file. It is designed for quick document translation inside a developer workflow, with provider adapters for OpenAI-compatible LLM APIs, DeepL, Google Cloud Translation, Microsoft Translator, and a local fake provider for smoke tests.
+VS Code Doc Translator creates a translated copy of your document, keeps the original untouched, and writes verifiable metadata beside the source file. It is designed for quick document translation inside a developer workflow, with provider adapters for OpenAI-compatible LLM APIs, DeepL, Google Cloud Translation, and Microsoft Translator.
 
 > Preview status: version 0.1.0 includes the first working VS Code extension, CLI, cache model, format adapters, and provider adapters. External provider adapters require your own credentials and should be validated against your chosen live API before production use.
 
@@ -46,13 +46,12 @@ Binary office formats and PDFs are intentionally out of scope for the first rele
 
 | Provider ID | Use case | Credential source |
 | --- | --- | --- |
-| `fake` | Local smoke tests and demos without external network calls. | None. |
 | `openai-compatible` | OpenAI-compatible chat/completions endpoints that can return structured JSON. | VS Code SecretStorage, CLI argument, or `DOC_TRANSLATOR_OPENAI_API_KEY`. |
 | `deepl` | DeepL API translation. | VS Code SecretStorage, CLI argument, or `DOC_TRANSLATOR_DEEPL_API_KEY`. |
 | `google` | Google Cloud Translation API. | VS Code SecretStorage, CLI argument, or `DOC_TRANSLATOR_GOOGLE_API_KEY`. |
 | `microsoft` | Microsoft Translator / Azure AI Translator. | VS Code SecretStorage, CLI argument, or `DOC_TRANSLATOR_MICROSOFT_API_KEY`. |
 
-Traditional machine translation providers receive segmented translation units. OpenAI-compatible LLM providers receive an ordered JSON reference document with stable unit IDs and must return a flat JSON list of translated unit IDs. Final document reconstruction always stays inside the format adapter.
+Traditional machine translation providers receive segmented translation units. OpenAI-compatible LLM providers receive an ordered JSON reference document with stable unit IDs and must return one flat JSON item for every requested unit ID. If the model wraps JSON in prose or Markdown fences, the provider tries to recover the JSON object; if the model omits an ID, the provider retries only the missing units. If a unit should remain unchanged, the model can return `{ "id": "...", "skip": true }` instead of omitting it. Final document reconstruction always stays inside the format adapter.
 
 ## Quick Start
 
@@ -64,7 +63,7 @@ Traditional machine translation providers receive segmented translation units. O
 
 You can also right-click a file in the Explorer and choose `Doc Translator: Translate Document`.
 
-The default provider is `fake` so the extension can be tested immediately without credentials. For real translation, switch to `openai-compatible`, `deepl`, `google`, or `microsoft`.
+The default provider is `openai-compatible`. Configure an endpoint, model, and API key in the settings panel before translating with it, or switch to `deepl`, `google`, or `microsoft`.
 
 ## Output And Cache
 
@@ -88,7 +87,7 @@ Most settings can be changed from the visual panel opened by `Doc Translator: Op
 | Setting | Default | Description |
 | --- | --- | --- |
 | `docTranslator.defaultTargetLanguage` | `zh-CN` | Target language used by VS Code commands. |
-| `docTranslator.defaultProvider` | `fake` | Provider ID: `fake`, `openai-compatible`, `deepl`, `google`, or `microsoft`. |
+| `docTranslator.defaultProvider` | `openai-compatible` | Provider ID: `openai-compatible`, `deepl`, `google`, or `microsoft`. |
 | `docTranslator.output.directoryMode` | `same-dir` | `same-dir` writes translated files beside the source; `hidden-cache` writes them into the cache directory. |
 | `docTranslator.output.openAfterTranslate` | `true` | Open the translated file after translation. |
 | `docTranslator.output.showDiffAfterTranslate` | `false` | Open a VS Code diff between the source and translated files. |
@@ -109,14 +108,14 @@ Most settings can be changed from the visual panel opened by `Doc Translator: Op
 The CLI uses the same core translation pipeline as the VS Code extension.
 
 ```bash
-vscode-doc-translator translate ./guide.md --to zh-CN --provider fake
+vscode-doc-translator translate ./guide.md --to zh-CN --provider openai-compatible
 ```
 
 When running from a local build:
 
 ```bash
-node dist/cli/main.js translate ./guide.md --to zh-CN --provider fake
-node dist/cli/main.js translate ./guide.md --to zh-CN --provider fake --output hidden-cache
+node dist/cli/main.js translate ./guide.md --to zh-CN --provider openai-compatible
+node dist/cli/main.js translate ./guide.md --to zh-CN --provider openai-compatible --output hidden-cache
 ```
 
 OpenAI-compatible example:
@@ -148,7 +147,7 @@ Useful CLI options:
 ```text
 --from auto
 --to zh-CN
---provider fake|openai-compatible|deepl|google|microsoft
+--provider openai-compatible|deepl|google|microsoft
 --output same-dir|hidden-cache
 --term-locks OpenAI,VS Code
 --force
@@ -158,7 +157,7 @@ Useful CLI options:
 
 ## Privacy And Security
 
-Document content is sent to the provider you choose, except when using the local `fake` provider. Review your provider's data policy before translating sensitive documents.
+Document content is sent to the provider you choose. Review your provider's data policy before translating sensitive documents.
 
 API keys and bearer tokens are not written to metadata, cache files, or normal logs. In VS Code, provider keys are stored in SecretStorage. In the CLI, prefer environment variables over command-line arguments when possible.
 

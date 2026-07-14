@@ -87,10 +87,10 @@ export class OpenAiCompatibleProvider implements TranslationProvider {
     chunk: OrderedContextChunk
   ): Promise<ChunkTranslationResult> {
     const firstAttempt = await this.requestChunkTranslations(request, chunk);
-    const warnings: string[] = collectChunkWarnings(firstAttempt, chunk.translationUnitIds);
+    const warnings: string[] = [...collectChunkWarnings(firstAttempt, chunk.translationUnitIds)];
     const missingIds = missingTranslationUnitIds(chunk.translationUnitIds, firstAttempt);
     let requestCount = 1;
-    let translations = firstAttempt;
+    let translations: readonly TranslatedUnit[] = firstAttempt;
 
     if (missingIds.length > 0) {
       warnings.push(
