@@ -4,13 +4,14 @@ import type {
   TranslationProvider
 } from "../domain/types";
 
-export const AI_TRANSLATION_HARNESS_VERSION = "3";
+export const AI_TRANSLATION_HARNESS_VERSION = "4";
 
 export type LlmTranslationAttempt =
   | "initial"
   | "missing-repair"
   | "unchanged-repair"
-  | "protected-token-repair";
+  | "protected-token-repair"
+  | "response-format-repair";
 
 export interface UnchangedTranslationReport {
   readonly consideredUnitIds: readonly string[];
@@ -24,7 +25,6 @@ export interface ProtectedTokenReport {
 }
 
 const REPAIR_THRESHOLD = 0.5;
-const REJECT_THRESHOLD = 0.5;
 
 export function createTranslationSystemPrompt(
   targetLanguage: string,
@@ -39,6 +39,9 @@ export function createTranslationSystemPrompt(
           "Return a translated text for every requested id and copy every requiredProtectedTokens entry " +
           "exactly once. Never replace a token with its underlying code, URL, markup, or term; never escape " +
           "or wrap a token with Markdown punctuation."
+      : attempt === "response-format-repair"
+        ? " RESPONSE FORMAT REPAIR: the previous response did not match the required translations schema. " +
+          "Return only the JSON object with a translations array and include every requested id."
       : attempt === "missing-repair"
         ? " COMPLETENESS REPAIR: return every requested id that was previously omitted."
         : "";
@@ -73,11 +76,19 @@ export function inspectProtectedTokens(input: {
     const unit = contextById.get(id);
     const translation = translatedById.get(id);
     if (!unit || !translation || unit.protectedTokens.length === 0) {
+      const foreignTokenCount = countForeignHarnessTokens(translation?.text ?? "", new Set());
+      if (foreignTokenCount > 0) {
+        affectedUnitIds.push(id);
+        violationCount += foreignTokenCount;
+      }
       continue;
     }
-    const violations = unit.protectedTokens.filter(
+    const expectedTokens = new Set(unit.protectedTokens.map(({ token }) => token));
+    const requiredTokenViolations = unit.protectedTokens.filter(
       ({ token }) => countOccurrences(translation.text, token) !== 1
     ).length;
+    const violations =
+      requiredTokenViolations + countForeignHarnessTokens(translation.text, expectedTokens);
     if (violations > 0) {
       affectedUnitIds.push(id);
       violationCount += violations;
@@ -139,7 +150,7 @@ export function inspectUnchangedTranslations(input: {
       !translation ||
       translation.preservedSource ||
       !hasMeaningfulNaturalLanguage(sourceText) ||
-      looksLikeTargetLanguage(sourceText, input.targetLanguage)
+      looksLikeTargetLanguage(sourceText, input.targetLanguage, "unit")
     ) {
       continue;
     }
@@ -160,19 +171,6 @@ export function inspectUnchangedTranslations(input: {
 
 export function shouldRepairUnchangedTranslations(report: UnchangedTranslationReport): boolean {
   return report.unchangedUnitIds.length > 0 && report.unchangedRatio >= REPAIR_THRESHOLD;
-}
-
-export function assertAcceptableUnchangedRatio(
-  report: UnchangedTranslationReport,
-  providerName: string
-): void {
-  if (report.unchangedUnitIds.length > 0 && report.unchangedRatio >= REJECT_THRESHOLD) {
-    throw new Error(
-      `${providerName} translation quality check failed: ${report.unchangedUnitIds.length} of ` +
-        `${report.consideredUnitIds.length} natural-language unit(s) remained identical to the source ` +
-        "after a focused retry. No translated file was written."
-    );
-  }
 }
 
 export function unchangedTranslationWarning(
@@ -266,7 +264,16 @@ function countOccurrences(text: string, value: string): number {
   return text.split(value).length - 1;
 }
 
-function looksLikeTargetLanguage(text: string, targetLanguage: string): boolean {
+function countForeignHarnessTokens(text: string, expectedTokens: ReadonlySet<string>): number {
+  const tokens = text.match(/__VDT_(?:PROTECTED|TERM)_[A-Za-z0-9_]+__/g) ?? [];
+  return tokens.filter((token) => !expectedTokens.has(token)).length;
+}
+
+export function looksLikeTargetLanguage(
+  text: string,
+  targetLanguage: string,
+  scope: "unit" | "document" = "unit"
+): boolean {
   const base = normalizeLanguage(targetLanguage).split("-")[0];
   const pattern = targetScriptPattern(base);
   if (!pattern) {
@@ -274,7 +281,18 @@ function looksLikeTargetLanguage(text: string, targetLanguage: string): boolean 
   }
   const targetScriptLetters = text.match(pattern)?.length ?? 0;
   const allLetters = text.match(/\p{L}/gu)?.length ?? 0;
-  return targetScriptLetters >= 2 && targetScriptLetters / Math.max(1, allLetters) >= 0.5;
+  const targetScriptRatio = targetScriptLetters / Math.max(1, allLetters);
+  if (base === "zh") {
+    if (scope === "document") {
+      return targetScriptLetters >= 20 && targetScriptRatio >= 0.1;
+    }
+    // Chinese technical prose often contains enough Latin identifiers to make Han a minority.
+    return (
+      targetScriptLetters >= 4 &&
+      (targetScriptRatio >= 0.15 || (targetScriptLetters >= 12 && targetScriptRatio >= 0.05))
+    );
+  }
+  return targetScriptLetters >= 2 && targetScriptRatio >= 0.5;
 }
 
 function targetScriptPattern(language: string): RegExp | undefined {

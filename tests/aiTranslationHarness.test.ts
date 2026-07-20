@@ -73,12 +73,97 @@ describe("AI translation quality harness", () => {
     ]);
   });
 
+  it("accepts Chinese technical prose even when Latin identifiers are frequent", async () => {
+    let requestCount = 0;
+    const source =
+      "Level2 使用 pinned Mindustry Java runtime 作为真实行为 oracle，并验证 canonical layout hash。";
+    const context = createContext([source]);
+    const provider = createProvider(async (_input, init) => {
+      requestCount += 1;
+      const request = readChatRequest(init);
+      return chatResponse(request.ids.map((id) => ({ id, text: source, skip: true })));
+    });
+
+    const result = await provider.translateBatch(createRequest(context));
+
+    expect(requestCount).toBe(1);
+    expect(result.requestCount).toBe(1);
+    expect(result.translations).toEqual([{ id: "unit-0", text: source, skipped: true }]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("skips API requests when an auto-detected document already uses the target language", async () => {
+    let requestCount = 0;
+    const context = createContext([
+      "这是一份已经使用简体中文编写的技术文档，介绍项目目标、实现范围和验证方法。",
+      "文档包含完整的中文说明，同时保留必要的 API、runtime 和 layout 等技术术语。"
+    ]);
+    const provider = createProvider(async () => {
+      requestCount += 1;
+      throw new Error("an already translated document must not call the API");
+    });
+
+    const result = await provider.translateBatch(createRequest(context));
+
+    expect(requestCount).toBe(0);
+    expect(result.requestCount).toBe(0);
+    expect(result.translations).toEqual(
+      context.units.map((unit) => ({ id: unit.id, text: unit.sourceText, skipped: true }))
+    );
+    expect(result.warnings.join("\n")).toContain("already uses zh-CN");
+  });
+
+  it("recognizes code-heavy Chinese documents at document scope", async () => {
+    let requestCount = 0;
+    const context = createContext([
+      "本文定义 compiler runtime adapter projection semantics validation architecture。",
+      "实现通过 TypeScript OpenAI Responses API JSON Schema cache metadata provider。",
+      "这些中文说明用于连接大量英文技术标识符，并保持文档结构和术语不变。"
+    ]);
+    const provider = createProvider(async () => {
+      requestCount += 1;
+      throw new Error("a code-heavy Chinese document must not call the API");
+    });
+
+    const result = await provider.translateBatch(createRequest(context));
+
+    expect(requestCount).toBe(0);
+    expect(result.requestCount).toBe(0);
+    expect(result.warnings.join("\n")).toContain("already uses zh-CN");
+  });
+
+  it("does not skip an English document containing a short Chinese example", async () => {
+    let requestCount = 0;
+    const context = createContext([
+      "This English guide includes the short Chinese example 你好世界, but the document still needs translation."
+    ]);
+    const provider = createProvider(async (_input, init) => {
+      requestCount += 1;
+      const request = readChatRequest(init);
+      return chatResponse(request.ids.map((id) => ({ id, text: "这份英文指南仍需翻译。", skip: false })));
+    });
+
+    const result = await provider.translateBatch(createRequest(context));
+
+    expect(requestCount).toBe(1);
+    expect(result.requestCount).toBe(1);
+    expect(result.translations[0].text).toBe("这份英文指南仍需翻译。");
+  });
+
   it("normalizes original and escaped tokens, then retries only genuinely missing tokens", async () => {
-    const requests: Array<{ attempt: string; ids: string[]; body: string }> = [];
+    const requests: Array<{ attempt: string; ids: string[]; body: string; contextIds: string[] }> = [];
     const context = createProtectedContext();
     const provider = createProvider(async (_input, init) => {
       const request = readChatRequest(init);
-      requests.push({ ...request, body: String(init?.body) });
+      const body = readChatBody(init);
+      const payload = JSON.parse(body.messages[1].content) as {
+        referenceDocument: { units: Array<{ id: string }> };
+      };
+      requests.push({
+        ...request,
+        body: String(init?.body),
+        contextIds: payload.referenceDocument.units.map((unit) => unit.id)
+      });
       if (request.attempt === "initial") {
         return chatResponse([
           {
@@ -110,8 +195,10 @@ describe("AI translation quality harness", () => {
       "protected-token-repair"
     ]);
     expect(requests[1].ids).toEqual(["unit-2"]);
-    expect(requests[1].body).toContain("https://example.com/private");
-    expect(requests[1].body).toContain("`deploy()`");
+    expect(requests[1].contextIds).toEqual(["unit-2"]);
+    expect(requests[1].body).toContain("<Widget />");
+    expect(requests[1].body).not.toContain("https://example.com/private");
+    expect(requests[1].body).not.toContain("`deploy()`");
     expect(requests[1].body).toContain("requiredProtectedTokens");
     expect(result.requestCount).toBe(2);
     expect(result.translations).toEqual([
@@ -128,6 +215,53 @@ describe("AI translation quality harness", () => {
         text: "打开 __VDT_PROTECTED_2_0__ 组件预览。"
       }
     ]);
+  });
+
+  it("repairs protected tokens that leak into the wrong translation unit", async () => {
+    const requests: Array<{ attempt: string; ids: string[] }> = [];
+    const context = createProtectedContext();
+    const provider = createProvider(async (_input, init) => {
+      const request = readChatRequest(init);
+      requests.push(request);
+      if (request.attempt === "initial") {
+        return chatResponse([
+          {
+            id: "unit-0",
+            text: "已翻译，但错误包含 __VDT_PROTECTED_1_0__。",
+            skip: false
+          },
+          {
+            id: "unit-1",
+            text: "运行 __VDT_PROTECTED_1_0__ 命令。",
+            skip: false
+          },
+          {
+            id: "unit-2",
+            text: "打开 __VDT_PROTECTED_2_0__ 组件预览。",
+            skip: false
+          }
+        ]);
+      }
+      return chatResponse([
+        {
+          id: "unit-0",
+          text: "请先阅读 __VDT_PROTECTED_0_0__ 私有文档。",
+          skip: false
+        }
+      ]);
+    });
+
+    const result = await provider.translateBatch(createRequest(context));
+
+    expect(requests.map(({ attempt }) => attempt)).toEqual([
+      "initial",
+      "protected-token-repair"
+    ]);
+    expect(requests[1].ids).toEqual(["unit-0"]);
+    expect(result.translations[0].text).toBe(
+      "请先阅读 __VDT_PROTECTED_0_0__ 私有文档。"
+    );
+    expect(result.translations[0].text).not.toContain("__VDT_PROTECTED_1_0__");
   });
 
   it("reconstructs translated Markdown when the model returns original protected values", async () => {
@@ -207,7 +341,7 @@ describe("AI translation quality harness", () => {
     );
   });
 
-  it("rejects repeated source echo before writing a translated artifact", async () => {
+  it("writes the document with warnings when repeated source echo cannot be repaired", async () => {
     const directory = await createTempDirectory();
     const sourcePath = path.join(directory, "roadmap.md");
     await fs.writeFile(
@@ -241,12 +375,15 @@ describe("AI translation quality harness", () => {
       );
     });
 
-    await expect(
-      translateDocument({ sourcePath, targetLanguage: "zh-CN", provider })
-    ).rejects.toThrow("remained identical to the source after a focused retry");
+    const result = await translateDocument({ sourcePath, targetLanguage: "zh-CN", provider });
+    const translated = await fs.readFile(result.targetPath, "utf8");
 
     expect(requestCount).toBe(2);
-    expect(await fs.readdir(directory)).toEqual(["roadmap.md"]);
+    expect(result.status).toBe("translated");
+    expect(translated).toContain("The roadmap explains the major implementation milestones");
+    expect(result.warnings.join("\n")).toContain(
+      "remained unchanged after retry; the document translation continued"
+    );
   });
 
   it("does not reuse an AI cache entry created by a different model", async () => {
@@ -302,7 +439,7 @@ describe("AI translation quality harness", () => {
     expect(first.metadata.provider.modelOrApiVersion).toBe("model-a");
     expect(second.metadata.provider.modelOrApiVersion).toBe("model-b");
     expect(second.metadata.provider.endpointLabel).toBe("https://example.test/v1");
-    expect(second.metadata.provider.harnessVersion).toBe("3");
+    expect(second.metadata.provider.harnessVersion).toBe("4");
     expect(second.metadata.profile.hash).not.toBe(first.metadata.profile.hash);
   });
 });

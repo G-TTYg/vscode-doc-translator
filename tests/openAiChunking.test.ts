@@ -161,6 +161,85 @@ describe("OpenAI-compatible chunking", () => {
     ]);
   });
 
+  it("recovers a flat translation mapping keyed by requested ids", () => {
+    const translations = parseTranslations(
+      JSON.stringify({
+        "unit-0": "译文一",
+        "unit-1": { text: "译文二", skip: false },
+        diagnostic: "must not become a translation"
+      }),
+      new Map([
+        ["unit-0", "Source one"],
+        ["unit-1", "Source two"]
+      ])
+    );
+
+    expect(translations).toEqual([
+      { id: "unit-0", text: "译文一" },
+      { id: "unit-1", text: "译文二" }
+    ]);
+  });
+
+  it("recovers a single translation object returned without an array wrapper", () => {
+    const translations = parseTranslations(
+      JSON.stringify({ id: "unit-0", text: "单项译文", skip: false }),
+      new Map([["unit-0", "Single source unit"]])
+    );
+
+    expect(translations).toEqual([{ id: "unit-0", text: "单项译文" }]);
+  });
+
+  it("retries a chunk once when the response object has no requested translations", async () => {
+    const attempts: string[] = [];
+    const provider = new OpenAiCompatibleProvider({
+      endpoint: "https://example.test/v1",
+      apiKey: "test-key",
+      model: "test-model",
+      maxContextTokens: 8000,
+      maxOutputTokens: 1024,
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          messages: Array<{ role: string; content: string }>;
+        };
+        const userMessage = body.messages.find((message) => message.role === "user");
+        const request = JSON.parse(userMessage?.content ?? "{}") as {
+          attempt: string;
+          translationUnitIds: string[];
+        };
+        attempts.push(request.attempt);
+        const content =
+          attempts.length === 1
+            ? JSON.stringify({ status: "schema_not_followed" })
+            : JSON.stringify({
+                translations: request.translationUnitIds.map((id) => ({
+                  id,
+                  text: "已恢复的译文",
+                  skip: false
+                }))
+              });
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content } }] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+    });
+    const context = createContext([
+      "This source sentence is long enough for the translation quality inspection."
+    ]);
+
+    const result = await provider.translateBatch({
+      sourceLanguage: "auto",
+      targetLanguage: "zh-CN",
+      units: context.units,
+      orderedContext: context
+    });
+
+    expect(attempts).toEqual(["initial", "response-format-repair"]);
+    expect(result.requestCount).toBe(2);
+    expect(result.translations).toEqual([{ id: "unit-0", text: "已恢复的译文" }]);
+    expect(result.warnings.join("\n")).toContain("invalid translation object");
+  });
+
   it("retries only missing translation ids and merges the repair response", async () => {
     const requestedBatches: string[][] = [];
     const provider = new OpenAiCompatibleProvider({
@@ -221,6 +300,64 @@ describe("OpenAI-compatible chunking", () => {
       { id: "unit-1", text: "repaired unit-1" },
       { id: "unit-2", text: "third", skipped: true }
     ]);
+  });
+
+  it("preserves omitted units after the bounded completeness retry", async () => {
+    const requestedBatches: string[][] = [];
+    const provider = new OpenAiCompatibleProvider({
+      endpoint: "https://example.test/v1",
+      apiKey: "test-key",
+      model: "test-model",
+      maxContextTokens: 8000,
+      maxOutputTokens: 1024,
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as {
+          messages: Array<{ role: string; content: string }>;
+        };
+        const request = JSON.parse(body.messages[1].content) as {
+          translationUnitIds: string[];
+        };
+        requestedBatches.push(request.translationUnitIds);
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    id: request.translationUnitIds[0],
+                    text: `translated ${request.translationUnitIds[0]}`,
+                    skip: false
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200 }
+        );
+      }
+    });
+    const context = createContext(["first source", "second source", "third source"]);
+
+    const result = await provider.translateBatch({
+      sourceLanguage: "auto",
+      targetLanguage: "zh-CN",
+      units: context.units,
+      orderedContext: context
+    });
+
+    expect(requestedBatches).toEqual([
+      ["unit-0", "unit-1", "unit-2"],
+      ["unit-1", "unit-2"]
+    ]);
+    expect(result.requestCount).toBe(2);
+    expect(result.translations).toEqual([
+      { id: "unit-0", text: "translated unit-0" },
+      { id: "unit-1", text: "translated unit-1" },
+      { id: "unit-2", text: "third source", preservedSource: true }
+    ]);
+    expect(result.warnings.join("\n")).toContain(
+      "kept source text for 1 omitted unit(s); the document translation continued"
+    );
   });
 });
 

@@ -1,6 +1,6 @@
 # ADR 2026-07-20: AI Source-Echo Quality Gate
 
-Status: Accepted
+Status: Superseded by `2026-07-20-success-oriented-ai-translation-recovery.md`
 Date: 2026-07-20
 
 ## Context

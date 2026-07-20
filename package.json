@@ -2,7 +2,7 @@
   "name": "vscode-doc-translator",
   "displayName": "VSCode Doc Translator",
   "description": "Translate whole documents from VS Code while preserving supported document structure.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "vscode-doc-translator",
   "icon": "assets/icon.png",
   "private": true,
@@ -296,7 +296,7 @@
     "compile": "tsc -p tsconfig.json",
     "test": "vitest run",
     "check": "npm run compile && npm test",
-    "package:vsix": "vsce package --out vscode-doc-translator-0.2.2.vsix"
+    "package:vsix": "vsce package --out vscode-doc-translator-0.2.3.vsix"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

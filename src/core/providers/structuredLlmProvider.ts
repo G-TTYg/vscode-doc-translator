@@ -9,9 +9,9 @@ import type {
 import {
   AI_TRANSLATION_HARNESS_VERSION,
   type LlmTranslationAttempt,
-  assertAcceptableUnchangedRatio,
   inspectProtectedTokens,
   inspectUnchangedTranslations,
+  looksLikeTargetLanguage,
   normalizeProtectedTokenFormatting,
   protectedTokenWarning,
   replaceTranslations,
@@ -82,6 +82,28 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
       throw new Error(`${this.displayName} requires ordered JSON context.`);
     }
 
+    if (
+      request.sourceLanguage === "auto" &&
+      looksLikeTargetLanguage(
+        request.orderedContext.units.map((unit) => unit.sourceText).join("\n"),
+        request.targetLanguage,
+        "document"
+      )
+    ) {
+      return {
+        translations: request.orderedContext.units.map((unit) => ({
+          id: unit.id,
+          text: unit.sourceText,
+          skipped: true
+        })),
+        warnings: [
+          `${this.displayName} detected that the document already uses ${request.targetLanguage}; ` +
+            "the source content was preserved without an API request."
+        ],
+        requestCount: 0
+      };
+    }
+
     const chunks = chunkOrderedDocumentContext(
       request.orderedContext,
       createSegmentationBudget(this.options)
@@ -113,12 +135,21 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
     request: TranslateRequest,
     chunk: OrderedContextChunk
   ): Promise<ChunkTranslationResult> {
-    const firstAttempt = await this.requestChunkTranslations(request, chunk, "initial");
-    const warnings: string[] = [
-      ...collectChunkWarnings(firstAttempt, chunk.translationUnitIds, this.displayName)
-    ];
-    const missingIds = missingTranslationUnitIds(chunk.translationUnitIds, firstAttempt);
+    let firstAttempt: readonly TranslatedUnit[];
     let requestCount = 1;
+    const warnings: string[] = [];
+    try {
+      firstAttempt = await this.requestChunkTranslations(request, chunk, "initial");
+    } catch (error) {
+      if (!(error instanceof LlmResponseFormatError)) {
+        throw error;
+      }
+      warnings.push(`${this.displayName} returned an invalid translation object; retrying the chunk.`);
+      firstAttempt = await this.requestChunkTranslations(request, chunk, "response-format-repair");
+      requestCount += 1;
+    }
+    warnings.push(...collectChunkWarnings(firstAttempt, chunk.translationUnitIds, this.displayName));
+    const missingIds = missingTranslationUnitIds(chunk.translationUnitIds, firstAttempt);
     let translations: readonly TranslatedUnit[] = firstAttempt;
 
     if (missingIds.length > 0) {
@@ -138,6 +169,16 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
         warnings.push(
           `${this.displayName} still did not return translation id(s) after retry: ${stillMissingIds.join(", ")}`
         );
+        translations = preserveSourceForUnits(
+          orderedKnownTranslations(translations, chunk.translationUnitIds),
+          chunk.context.units,
+          stillMissingIds,
+          chunk.translationUnitIds
+        );
+        warnings.push(
+          `${this.displayName} kept source text for ${stillMissingIds.length} omitted unit(s); ` +
+            "the document translation continued."
+        );
       }
     }
 
@@ -151,7 +192,7 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
       warnings.push(protectedTokenWarning(report, this.displayName, "retrying"));
       const repairTranslations = await this.requestChunkTranslations(
         request,
-        withTranslationUnitIds(chunk, report.affectedUnitIds),
+        withFocusedTranslationUnits(chunk, report.affectedUnitIds),
         "protected-token-repair"
       );
       requestCount += 1;
@@ -270,8 +311,17 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
       warnings.push(
         unchangedTranslationWarning(finalUnchangedReport, this.displayName, "remaining")
       );
+      orderedTranslations = preserveSourceForUnits(
+        orderedTranslations,
+        chunk.context.units,
+        finalUnchangedReport.unchangedUnitIds,
+        chunk.translationUnitIds
+      );
+      warnings.push(
+        `${this.displayName} kept source text for ${finalUnchangedReport.unchangedUnitIds.length} ` +
+          "unit(s) that remained unchanged after retry; the document translation continued."
+      );
     }
-    assertAcceptableUnchangedRatio(finalUnchangedReport, this.displayName);
 
     return {
       translations: orderedTranslations,
@@ -437,14 +487,12 @@ export function parseTranslations(
   sourceTextById: ReadonlyMap<string, string> = new Map()
 ): readonly TranslatedUnit[] {
   const parsed = parseJsonWithRecovery(content);
-  const translationsValue = Array.isArray(parsed)
-    ? parsed
-    : isRecord(parsed)
-      ? parsed.translations
-      : undefined;
+  const translationsValue = recoverTranslationItems(parsed, sourceTextById);
 
   if (!Array.isArray(translationsValue)) {
-    throw new Error("LLM response must contain a translations array.");
+    throw new LlmResponseFormatError(
+      `LLM response must contain translations for requested ids (${describeJsonShape(parsed)}).`
+    );
   }
 
   return translationsValue.map((item) => {
@@ -470,6 +518,13 @@ export function parseTranslations(
       text: item.text
     };
   });
+}
+
+export class LlmResponseFormatError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LlmResponseFormatError";
+  }
 }
 
 function parseJsonWithRecovery(content: string): unknown {
@@ -572,6 +627,68 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function recoverTranslationItems(
+  parsed: unknown,
+  sourceTextById: ReadonlyMap<string, string>
+): unknown {
+  if (Array.isArray(parsed)) {
+    return parsed;
+  }
+  if (!isRecord(parsed)) {
+    return undefined;
+  }
+  if (Array.isArray(parsed.translations)) {
+    return parsed.translations;
+  }
+  if (
+    typeof parsed.id === "string" &&
+    sourceTextById.has(parsed.id) &&
+    (typeof parsed.text === "string" || parsed.skip === true)
+  ) {
+    return [parsed];
+  }
+  const nestedMapping = recoverKnownIdMapping(parsed.translations, sourceTextById);
+  if (nestedMapping) {
+    return nestedMapping;
+  }
+  return recoverKnownIdMapping(parsed, sourceTextById);
+}
+
+function recoverKnownIdMapping(
+  value: unknown,
+  sourceTextById: ReadonlyMap<string, string>
+): readonly Record<string, unknown>[] | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const recovered = Object.entries(value).flatMap(([id, translation]) => {
+    if (!sourceTextById.has(id)) {
+      return [];
+    }
+    if (typeof translation === "string") {
+      return [{ id, text: translation, skip: false }];
+    }
+    if (isRecord(translation) && typeof translation.text === "string") {
+      return [{ id, text: translation.text, skip: translation.skip === true }];
+    }
+    return [];
+  });
+  return recovered.length > 0 ? recovered : undefined;
+}
+
+function describeJsonShape(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `array length ${value.length}`;
+  }
+  if (!isRecord(value)) {
+    return typeof value;
+  }
+  const fields = Object.entries(value)
+    .slice(0, 8)
+    .map(([key, fieldValue]) => `${key}:${Array.isArray(fieldValue) ? "array" : typeof fieldValue}`);
+  return `object fields ${fields.join(", ") || "none"}`;
+}
+
 export function createSourceTextMap(
   units: readonly OrderedContextUnit[]
 ): ReadonlyMap<string, string> {
@@ -629,6 +746,21 @@ function withTranslationUnitIds(
 ): OrderedContextChunk {
   return {
     ...chunk,
+    translationUnitIds
+  };
+}
+
+function withFocusedTranslationUnits(
+  chunk: OrderedContextChunk,
+  translationUnitIds: readonly string[]
+): OrderedContextChunk {
+  const requested = new Set(translationUnitIds);
+  return {
+    ...chunk,
+    context: withUnits(
+      chunk.context,
+      chunk.context.units.filter((unit) => requested.has(unit.id))
+    ),
     translationUnitIds
   };
 }
@@ -801,6 +933,8 @@ function attemptInstruction(attempt: LlmTranslationAttempt): string {
       return "This is a quality repair. The previous response echoed source text; translate every requested id now.";
     case "protected-token-repair":
       return "This is a token repair. Preserve every required protected token exactly once while translating the surrounding text.";
+    case "response-format-repair":
+      return "This is a response-format repair. Return the required translations array and no alternative object shape.";
     default:
       return "This is the initial translation attempt.";
   }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3
+
+- Made AI translation completion-oriented: unrepaired source echoes and omitted ids now fall back per unit instead of failing the whole document.
+- Added recovery for flat id maps, single translation objects, and one malformed response-format retry.
+- Detect documents already written in the selected target language and avoid unnecessary AI calls.
+- Isolated protected-token repair context and detect duplicated or cross-unit token leakage.
+- Validated the OpenAI Responses provider against a 34-file Markdown corpus with all files completing successfully.
+
 ## 0.2.2
 
 - Made AI protected-token handling success-oriented: normalize common model rewrites, retry only affected units, and complete with a source-preserving fallback when repair still fails.
