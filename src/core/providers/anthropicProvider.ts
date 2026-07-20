@@ -4,6 +4,7 @@ import {
   StructuredLlmProvider,
   type StructuredLlmProviderOptions,
   type OrderedContextChunk,
+  TRANSLATION_RESPONSE_JSON_SCHEMA,
   TRANSLATION_SYSTEM_PROMPT,
   createAiTranslationPayload,
   createSourceTextMap,
@@ -11,22 +12,22 @@ import {
   trimTrailingSlash
 } from "./structuredLlmProvider";
 
-export interface OpenAiCompatibleProviderOptions extends StructuredLlmProviderOptions {
+export interface AnthropicProviderOptions extends StructuredLlmProviderOptions {
   readonly endpoint: string;
   readonly apiKey: string;
   readonly model: string;
   readonly fetch?: typeof fetch;
 }
 
-export class OpenAiCompatibleProvider extends StructuredLlmProvider {
-  readonly id = "openai-compatible";
-  readonly displayName = "OpenAI-compatible Chat Completions";
+export class AnthropicProvider extends StructuredLlmProvider {
+  readonly id = "anthropic";
+  readonly displayName = "Anthropic Messages API";
 
-  constructor(private readonly providerOptions: OpenAiCompatibleProviderOptions) {
+  constructor(private readonly providerOptions: AnthropicProviderOptions) {
     super(providerOptions);
-    requireOption(providerOptions.endpoint, "OpenAI-compatible endpoint");
-    requireOption(providerOptions.apiKey, "OpenAI-compatible API key");
-    requireOption(providerOptions.model, "OpenAI-compatible model");
+    requireOption(providerOptions.endpoint, "Anthropic endpoint");
+    requireOption(providerOptions.apiKey, "Anthropic API key");
+    requireOption(providerOptions.model, "Anthropic model");
   }
 
   protected async requestChunkTranslations(
@@ -35,20 +36,19 @@ export class OpenAiCompatibleProvider extends StructuredLlmProvider {
   ): Promise<readonly TranslatedUnit[]> {
     const response = await fetchWithRetry(
       this.providerOptions.fetch ?? fetch,
-      `${trimTrailingSlash(this.providerOptions.endpoint)}/chat/completions`,
+      messagesUrl(this.providerOptions.endpoint),
       {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          authorization: `Bearer ${this.providerOptions.apiKey}`
+          "x-api-key": this.providerOptions.apiKey,
+          "anthropic-version": "2023-06-01"
         },
         body: JSON.stringify({
           model: this.providerOptions.model,
-          temperature: 0,
-          response_format: { type: "json_object" },
           max_tokens: this.capabilities.maxOutputTokens,
+          system: TRANSLATION_SYSTEM_PROMPT,
           messages: [
-            { role: "system", content: TRANSLATION_SYSTEM_PROMPT },
             {
               role: "user",
               content: JSON.stringify(
@@ -60,27 +60,45 @@ export class OpenAiCompatibleProvider extends StructuredLlmProvider {
                 })
               )
             }
-          ]
+          ],
+          output_config: {
+            format: {
+              type: "json_schema",
+              schema: TRANSLATION_RESPONSE_JSON_SCHEMA
+            }
+          }
         })
       }
     );
 
     if (!response.ok) {
-      throw new Error(
-        `OpenAI-compatible API error ${response.status}: ${await readErrorBody(response)}`
-      );
+      throw new Error(`Anthropic API error ${response.status}: ${await readErrorBody(response)}`);
     }
 
     const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
+      content?: readonly { type?: string; text?: string }[];
+      stop_reason?: string;
     };
-    const content = payload.choices?.[0]?.message?.content;
+    const content = (payload.content ?? [])
+      .filter((block) => block.type === "text" && typeof block.text === "string")
+      .map((block) => block.text as string)
+      .join("");
     if (!content) {
-      throw new Error("OpenAI-compatible API returned no message content.");
+      throw new Error(
+        `Anthropic API returned no text content${payload.stop_reason ? ` (stop reason: ${payload.stop_reason})` : ""}.`
+      );
     }
 
     return parseTranslations(content, createSourceTextMap(chunk.context.units));
   }
+}
+
+function messagesUrl(endpoint: string): string {
+  const base = trimTrailingSlash(endpoint);
+  if (base.endsWith("/v1/messages")) {
+    return base;
+  }
+  return base.endsWith("/v1") ? `${base}/messages` : `${base}/v1/messages`;
 }
 
 function requireOption(value: string, label: string): void {
@@ -88,10 +106,3 @@ function requireOption(value: string, label: string): void {
     throw new Error(`${label} is required.`);
   }
 }
-
-export {
-  chunkOrderedDocumentContext,
-  createAiTranslationPayload,
-  parseTranslations
-} from "./structuredLlmProvider";
-export type { AiSegmentationBudget, OrderedContextChunk } from "./structuredLlmProvider";

@@ -3,7 +3,10 @@ import type { OutputDirectoryMode } from "../core/domain/types";
 import { normalizeTargetLanguageCode, TARGET_LANGUAGES } from "./targetLanguages";
 
 export const SECRET_KEYS = {
+  openAiResponses: "docTranslator.openAiApiKey",
   openAiCompatible: "docTranslator.openaiCompatibleApiKey",
+  anthropic: "docTranslator.anthropicApiKey",
+  gemini: "docTranslator.geminiApiKey",
   deepl: "docTranslator.deeplApiKey",
   google: "docTranslator.googleApiKey",
   microsoft: "docTranslator.microsoftApiKey"
@@ -19,15 +22,24 @@ interface SettingsState {
   readonly deleteStaleAutoTranslations: boolean;
   readonly termLocks: readonly string[];
   readonly insertMarkdownHeader: boolean;
+  readonly openAiEndpoint: string;
+  readonly openAiModel: string;
   readonly llmEndpoint: string;
   readonly llmModel: string;
   readonly llmMaxContextTokens: number;
   readonly llmMaxOutputTokens: number;
+  readonly anthropicEndpoint: string;
+  readonly anthropicModel: string;
+  readonly geminiEndpoint: string;
+  readonly geminiModel: string;
   readonly deeplEndpoint: string;
   readonly googleEndpoint: string;
   readonly microsoftEndpoint: string;
   readonly microsoftRegion: string;
+  readonly hasOpenAiResponsesKey: boolean;
   readonly hasOpenAiKey: boolean;
+  readonly hasAnthropicKey: boolean;
+  readonly hasGeminiKey: boolean;
   readonly hasDeepLKey: boolean;
   readonly hasGoogleKey: boolean;
   readonly hasMicrosoftKey: boolean;
@@ -36,7 +48,10 @@ interface SettingsState {
 type SaveSettingsMessage = {
   readonly type: "save";
   readonly values: Partial<SettingsState> & {
+    readonly openAiResponsesKey?: string;
     readonly openAiKey?: string;
+    readonly anthropicKey?: string;
+    readonly geminiKey?: string;
     readonly deeplKey?: string;
     readonly googleKey?: string;
     readonly microsoftKey?: string;
@@ -81,7 +96,7 @@ async function readSettingsState(context: vscode.ExtensionContext): Promise<Sett
     defaultTargetLanguage: normalizeTargetLanguageCode(
       config.get<string>("defaultTargetLanguage", "zh-CN")
     ),
-    defaultProvider: config.get<string>("defaultProvider", "openai-compatible"),
+    defaultProvider: config.get<string>("defaultProvider", "openai-responses"),
     outputDirectoryMode: config.get<OutputDirectoryMode>("output.directoryMode", "same-dir"),
     openAfterTranslate: config.get<boolean>("output.openAfterTranslate", true),
     showDiffAfterTranslate: config.get<boolean>("output.showDiffAfterTranslate", false),
@@ -95,10 +110,19 @@ async function readSettingsState(context: vscode.ExtensionContext): Promise<Sett
     ),
     termLocks: config.get<string[]>("termLocks", []),
     insertMarkdownHeader: config.get<boolean>("markdown.insertAutoTranslationHeader", false),
+    openAiEndpoint: config.get<string>("openai.endpoint", "https://api.openai.com/v1"),
+    openAiModel: config.get<string>("openai.model", ""),
     llmEndpoint: config.get<string>("llm.endpoint", "https://api.openai.com/v1"),
     llmModel: config.get<string>("llm.model", ""),
     llmMaxContextTokens: config.get<number>("llm.maxContextTokens", 128000),
     llmMaxOutputTokens: config.get<number>("llm.maxOutputTokens", 4096),
+    anthropicEndpoint: config.get<string>("anthropic.endpoint", "https://api.anthropic.com"),
+    anthropicModel: config.get<string>("anthropic.model", ""),
+    geminiEndpoint: config.get<string>(
+      "gemini.endpoint",
+      "https://generativelanguage.googleapis.com/v1beta"
+    ),
+    geminiModel: config.get<string>("gemini.model", ""),
     deeplEndpoint: config.get<string>("deepl.endpoint", "https://api-free.deepl.com"),
     googleEndpoint: config.get<string>("google.endpoint", "https://translation.googleapis.com"),
     microsoftEndpoint: config.get<string>(
@@ -106,7 +130,10 @@ async function readSettingsState(context: vscode.ExtensionContext): Promise<Sett
       "https://api.cognitive.microsofttranslator.com"
     ),
     microsoftRegion: config.get<string>("microsoft.region", ""),
+    hasOpenAiResponsesKey: Boolean(await context.secrets.get(SECRET_KEYS.openAiResponses)),
     hasOpenAiKey: Boolean(await context.secrets.get(SECRET_KEYS.openAiCompatible)),
+    hasAnthropicKey: Boolean(await context.secrets.get(SECRET_KEYS.anthropic)),
+    hasGeminiKey: Boolean(await context.secrets.get(SECRET_KEYS.gemini)),
     hasDeepLKey: Boolean(await context.secrets.get(SECRET_KEYS.deepl)),
     hasGoogleKey: Boolean(await context.secrets.get(SECRET_KEYS.google)),
     hasMicrosoftKey: Boolean(await context.secrets.get(SECRET_KEYS.microsoft))
@@ -144,16 +171,25 @@ async function saveSettingsState(
     values.insertMarkdownHeader,
     target
   );
+  await updateIfDefined(config, "openai.endpoint", values.openAiEndpoint, target);
+  await updateIfDefined(config, "openai.model", values.openAiModel, target);
   await updateIfDefined(config, "llm.endpoint", values.llmEndpoint, target);
   await updateIfDefined(config, "llm.model", values.llmModel, target);
   await updateIfDefined(config, "llm.maxContextTokens", values.llmMaxContextTokens, target);
   await updateIfDefined(config, "llm.maxOutputTokens", values.llmMaxOutputTokens, target);
+  await updateIfDefined(config, "anthropic.endpoint", values.anthropicEndpoint, target);
+  await updateIfDefined(config, "anthropic.model", values.anthropicModel, target);
+  await updateIfDefined(config, "gemini.endpoint", values.geminiEndpoint, target);
+  await updateIfDefined(config, "gemini.model", values.geminiModel, target);
   await updateIfDefined(config, "deepl.endpoint", values.deeplEndpoint, target);
   await updateIfDefined(config, "google.endpoint", values.googleEndpoint, target);
   await updateIfDefined(config, "microsoft.endpoint", values.microsoftEndpoint, target);
   await updateIfDefined(config, "microsoft.region", values.microsoftRegion, target);
 
+  await storeSecretIfPresent(context, SECRET_KEYS.openAiResponses, values.openAiResponsesKey);
   await storeSecretIfPresent(context, SECRET_KEYS.openAiCompatible, values.openAiKey);
+  await storeSecretIfPresent(context, SECRET_KEYS.anthropic, values.anthropicKey);
+  await storeSecretIfPresent(context, SECRET_KEYS.gemini, values.geminiKey);
   await storeSecretIfPresent(context, SECRET_KEYS.deepl, values.deeplKey);
   await storeSecretIfPresent(context, SECRET_KEYS.google, values.googleKey);
   await storeSecretIfPresent(context, SECRET_KEYS.microsoft, values.microsoftKey);
@@ -328,8 +364,55 @@ function renderSettingsHtml(state: SettingsState): string {
           state.termLocks.join("\n")
         )}</textarea></label>
       </section>
-      <section>
-        <h2>OpenAI-compatible</h2>
+      <section class="ai-limits">
+        <h2>AI request limits</h2>
+        <div class="grid">
+          <label><span>Model max context tokens</span><input type="number" min="1000" step="1000" name="llmMaxContextTokens" value="${
+            state.llmMaxContextTokens
+          }" /></label>
+          <label><span>Max output tokens</span><input type="number" min="256" step="256" name="llmMaxOutputTokens" value="${
+            state.llmMaxOutputTokens
+          }" /></label>
+        </div>
+      </section>
+      <section class="provider-section" data-provider="openai-responses">
+        <h2>OpenAI Responses API</h2>
+        <div class="grid">
+          <label><span>Endpoint</span><input name="openAiEndpoint" value="${escapeHtml(
+            state.openAiEndpoint
+          )}" /></label>
+          <label><span>Model</span><input name="openAiModel" value="${escapeHtml(
+            state.openAiModel
+          )}" placeholder="Enter a model name" /></label>
+          <label><span>API key ${state.hasOpenAiResponsesKey ? "(saved)" : ""}</span><input type="password" name="openAiResponsesKey" autocomplete="off" /></label>
+        </div>
+      </section>
+      <section class="provider-section" data-provider="anthropic">
+        <h2>Anthropic Messages API</h2>
+        <div class="grid">
+          <label><span>Endpoint</span><input name="anthropicEndpoint" value="${escapeHtml(
+            state.anthropicEndpoint
+          )}" /></label>
+          <label><span>Model</span><input name="anthropicModel" value="${escapeHtml(
+            state.anthropicModel
+          )}" placeholder="Enter a model name" /></label>
+          <label><span>API key ${state.hasAnthropicKey ? "(saved)" : ""}</span><input type="password" name="anthropicKey" autocomplete="off" /></label>
+        </div>
+      </section>
+      <section class="provider-section" data-provider="gemini">
+        <h2>Gemini GenerateContent API</h2>
+        <div class="grid">
+          <label><span>Endpoint</span><input name="geminiEndpoint" value="${escapeHtml(
+            state.geminiEndpoint
+          )}" /></label>
+          <label><span>Model</span><input name="geminiModel" value="${escapeHtml(
+            state.geminiModel
+          )}" placeholder="Enter a model name" /></label>
+          <label><span>API key ${state.hasGeminiKey ? "(saved)" : ""}</span><input type="password" name="geminiKey" autocomplete="off" /></label>
+        </div>
+      </section>
+      <section class="provider-section" data-provider="openai-compatible">
+        <h2>OpenAI-compatible Chat Completions</h2>
         <div class="grid">
           <label><span>Endpoint</span><input name="llmEndpoint" value="${escapeHtml(
             state.llmEndpoint
@@ -337,16 +420,10 @@ function renderSettingsHtml(state: SettingsState): string {
           <label><span>Model</span><input name="llmModel" value="${escapeHtml(
             state.llmModel
           )}" /></label>
-          <label><span>Model max context tokens</span><input type="number" min="1000" step="1000" name="llmMaxContextTokens" value="${
-            state.llmMaxContextTokens
-          }" /></label>
-          <label><span>Max output tokens</span><input type="number" min="256" step="256" name="llmMaxOutputTokens" value="${
-            state.llmMaxOutputTokens
-          }" /></label>
           <label><span>API key ${state.hasOpenAiKey ? "(saved)" : ""}</span><input type="password" name="openAiKey" autocomplete="off" /></label>
         </div>
       </section>
-      <section>
+      <section class="provider-section" data-provider="deepl">
         <h2>DeepL</h2>
         <div class="grid">
           <label><span>Endpoint</span><input name="deeplEndpoint" value="${escapeHtml(
@@ -355,8 +432,8 @@ function renderSettingsHtml(state: SettingsState): string {
           <label><span>API key ${state.hasDeepLKey ? "(saved)" : ""}</span><input type="password" name="deeplKey" autocomplete="off" /></label>
         </div>
       </section>
-      <section>
-        <h2>Google</h2>
+      <section class="provider-section" data-provider="google">
+        <h2>Google Cloud Translation</h2>
         <div class="grid">
           <label><span>Endpoint</span><input name="googleEndpoint" value="${escapeHtml(
             state.googleEndpoint
@@ -364,7 +441,7 @@ function renderSettingsHtml(state: SettingsState): string {
           <label><span>API key ${state.hasGoogleKey ? "(saved)" : ""}</span><input type="password" name="googleKey" autocomplete="off" /></label>
         </div>
       </section>
-      <section>
+      <section class="provider-section" data-provider="microsoft">
         <h2>Microsoft</h2>
         <div class="grid">
           <label><span>Endpoint</span><input name="microsoftEndpoint" value="${escapeHtml(
@@ -385,6 +462,17 @@ function renderSettingsHtml(state: SettingsState): string {
   <script>
     const vscode = acquireVsCodeApi();
     const form = document.getElementById("settings");
+    const providerSelect = form.elements.namedItem("defaultProvider");
+    const aiProviders = new Set(["openai-responses", "anthropic", "gemini", "openai-compatible"]);
+    const syncProviderSections = () => {
+      const selected = providerSelect.value;
+      document.querySelectorAll(".provider-section").forEach((section) => {
+        section.hidden = section.dataset.provider !== selected;
+      });
+      document.querySelector(".ai-limits").hidden = !aiProviders.has(selected);
+    };
+    providerSelect.addEventListener("change", syncProviderSections);
+    syncProviderSections();
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const data = new FormData(form);
@@ -400,11 +488,20 @@ function renderSettingsHtml(state: SettingsState): string {
           deleteStaleAutoTranslations: data.get("deleteStaleAutoTranslations") === "on",
           termLocks: String(data.get("termLocks") || "").split("\\n").map((item) => item.trim()).filter(Boolean),
           insertMarkdownHeader: data.get("insertMarkdownHeader") === "on",
+          openAiEndpoint: data.get("openAiEndpoint"),
+          openAiModel: data.get("openAiModel"),
+          openAiResponsesKey: data.get("openAiResponsesKey"),
           llmEndpoint: data.get("llmEndpoint"),
           llmModel: data.get("llmModel"),
           llmMaxContextTokens: Number(data.get("llmMaxContextTokens")),
           llmMaxOutputTokens: Number(data.get("llmMaxOutputTokens")),
           openAiKey: data.get("openAiKey"),
+          anthropicEndpoint: data.get("anthropicEndpoint"),
+          anthropicModel: data.get("anthropicModel"),
+          anthropicKey: data.get("anthropicKey"),
+          geminiEndpoint: data.get("geminiEndpoint"),
+          geminiModel: data.get("geminiModel"),
+          geminiKey: data.get("geminiKey"),
           deeplEndpoint: data.get("deeplEndpoint"),
           deeplKey: data.get("deeplKey"),
           googleEndpoint: data.get("googleEndpoint"),
@@ -421,10 +518,18 @@ function renderSettingsHtml(state: SettingsState): string {
 }
 
 function providerOptions(selected: string): string {
-  return ["openai-compatible", "deepl", "google", "microsoft"]
-    .map((provider) => {
+  return [
+    ["openai-responses", "OpenAI Responses API"],
+    ["anthropic", "Anthropic Messages API"],
+    ["gemini", "Gemini GenerateContent API"],
+    ["openai-compatible", "OpenAI-compatible Chat Completions"],
+    ["deepl", "DeepL"],
+    ["google", "Google Cloud Translation"],
+    ["microsoft", "Microsoft Translator"]
+  ]
+    .map(([provider, label]) => {
       const isSelected = provider === selected ? "selected" : "";
-      return `<option value="${provider}" ${isSelected}>${provider}</option>`;
+      return `<option value="${provider}" ${isSelected}>${label}</option>`;
     })
     .join("");
 }

@@ -42,6 +42,19 @@ export function activate(context: vscode.ExtensionContext): void {
       await context.secrets.store(SECRET_KEYS.openAiCompatible, apiKey);
       await vscode.window.showInformationMessage("Doc Translator API key saved.");
     }),
+    vscode.commands.registerCommand("docTranslator.setOpenAiApiKey", async () => {
+      const apiKey = await vscode.window.showInputBox({
+        title: "OpenAI API Key",
+        password: true,
+        ignoreFocusOut: true,
+        prompt: "Stored in VS Code SecretStorage for this user."
+      });
+      if (!apiKey) {
+        return;
+      }
+      await context.secrets.store(SECRET_KEYS.openAiResponses, apiKey);
+      await vscode.window.showInformationMessage("Doc Translator OpenAI API key saved.");
+    }),
     vscode.commands.registerCommand("docTranslator.openSettings", async () => {
       await openSettingsPanel(context);
     })
@@ -66,7 +79,7 @@ async function runTranslate(
   const targetLanguage = normalizeTargetLanguageCode(
     config.get<string>("defaultTargetLanguage", "zh-CN")
   );
-  const providerId = config.get<string>("defaultProvider", "openai-compatible");
+  const providerId = config.get<string>("defaultProvider", "openai-responses");
   const cacheDirectoryName = config.get<string>(
     "cache.hiddenDirectoryName",
     ".vscode-doc-translator-cache"
@@ -80,7 +93,10 @@ async function runTranslate(
   const openAfterTranslate = config.get<boolean>("output.openAfterTranslate", true);
   const showDiffAfterTranslate = config.get<boolean>("output.showDiffAfterTranslate", false);
   const termLocks = config.get<string[]>("termLocks", []);
+  const openAiResponsesApiKey = await context.secrets.get(SECRET_KEYS.openAiResponses);
   const openAiApiKey = await context.secrets.get(SECRET_KEYS.openAiCompatible);
+  const anthropicApiKey = await context.secrets.get(SECRET_KEYS.anthropic);
+  const geminiApiKey = await context.secrets.get(SECRET_KEYS.gemini);
   const deeplApiKey = await context.secrets.get(SECRET_KEYS.deepl);
   const googleApiKey = await context.secrets.get(SECRET_KEYS.google);
   const microsoftApiKey = await context.secrets.get(SECRET_KEYS.microsoft);
@@ -94,10 +110,37 @@ async function runTranslate(
   try {
     provider = createProvider({
       providerId,
+      openAiResponses: {
+        endpoint: config.get<string>("openai.endpoint", "https://api.openai.com/v1"),
+        model: config.get<string>("openai.model", ""),
+        apiKey: openAiResponsesApiKey,
+        maxContextTokens: config.get<number>("llm.maxContextTokens", 128000),
+        maxOutputTokens: config.get<number>("llm.maxOutputTokens", 4096),
+        maxContextCharacters: optionalPositive(config.get<number>("llm.maxContextCharacters", 0))
+      },
       openAiCompatible: {
         endpoint: config.get<string>("llm.endpoint", "https://api.openai.com/v1"),
         model: config.get<string>("llm.model", ""),
         apiKey: openAiApiKey,
+        maxContextTokens: config.get<number>("llm.maxContextTokens", 128000),
+        maxOutputTokens: config.get<number>("llm.maxOutputTokens", 4096),
+        maxContextCharacters: optionalPositive(config.get<number>("llm.maxContextCharacters", 0))
+      },
+      anthropic: {
+        endpoint: config.get<string>("anthropic.endpoint", "https://api.anthropic.com"),
+        model: config.get<string>("anthropic.model", ""),
+        apiKey: anthropicApiKey,
+        maxContextTokens: config.get<number>("llm.maxContextTokens", 128000),
+        maxOutputTokens: config.get<number>("llm.maxOutputTokens", 4096),
+        maxContextCharacters: optionalPositive(config.get<number>("llm.maxContextCharacters", 0))
+      },
+      gemini: {
+        endpoint: config.get<string>(
+          "gemini.endpoint",
+          "https://generativelanguage.googleapis.com/v1beta"
+        ),
+        model: config.get<string>("gemini.model", ""),
+        apiKey: geminiApiKey,
         maxContextTokens: config.get<number>("llm.maxContextTokens", 128000),
         maxOutputTokens: config.get<number>("llm.maxOutputTokens", 4096),
         maxContextCharacters: optionalPositive(config.get<number>("llm.maxContextCharacters", 0))

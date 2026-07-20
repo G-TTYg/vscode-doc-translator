@@ -8,7 +8,7 @@
 ## Project Purpose
 
 - This project builds a VS Code document translator that can translate a whole document from the editor context menu, explorer context menu, or command palette while preserving document structure and formatting as much as possible.
-- The translator will support multiple backends through adapters: Google Translation API, DeepL API, Microsoft Translator, and OpenAI-compatible LLM APIs.
+- The translator supports multiple backends through adapters: OpenAI Responses, Anthropic Messages, Gemini GenerateContent, OpenAI-compatible Chat Completions, Google Translation API, DeepL API, and Microsoft Translator.
 - The translator will save a translated copy and a coupled hidden sidecar under `.vscode-doc-translator-cache/` next to the source document so VS Code can open the translated copy as a normal file.
 - Non-goals for the first implementation: arbitrary binary office/PDF fidelity, machine translation account management, and replacing dedicated CAT/TMS tools.
 - Primary users: VS Code users who need quick whole-document translation with reproducible cache metadata and low manual cleanup.
@@ -30,7 +30,7 @@
 - `logs/` - dated project-local work logs and handoff notes.
 - `src/core/domain/` - shared contracts, naming, hashing, protected-token utilities.
 - `src/core/formats/` - plain text and Markdown format adapters.
-- `src/core/providers/` - provider boundary, OpenAI-compatible/DeepL/Google/Microsoft providers, batching helpers.
+- `src/core/providers/` - provider boundary, native and compatible LLM providers, traditional MT providers, shared LLM workflow, and batching helpers.
 - `src/core/application/` - `translateDocument` use case and metadata/cache store.
 - `src/extension/` - VS Code extension entrypoint and settings webview.
 - `tests/` - Vitest unit/integration tests.

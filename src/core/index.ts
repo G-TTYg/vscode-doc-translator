@@ -1,6 +1,9 @@
 export { translateDocument } from "./application/translateDocument";
 export { createProvider } from "./providers/providerFactory";
 export { OpenAiCompatibleProvider } from "./providers/openAiCompatibleProvider";
+export { OpenAiResponsesProvider } from "./providers/openAiResponsesProvider";
+export { AnthropicProvider } from "./providers/anthropicProvider";
+export { GeminiProvider } from "./providers/geminiProvider";
 export { DeepLProvider } from "./providers/deeplProvider";
 export { GoogleTranslateProvider } from "./providers/googleProvider";
 export { MicrosoftTranslatorProvider } from "./providers/microsoftProvider";

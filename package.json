@@ -2,11 +2,27 @@
   "name": "vscode-doc-translator",
   "displayName": "VSCode Doc Translator",
   "description": "Translate whole documents from VS Code while preserving supported document structure.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "vscode-doc-translator",
   "icon": "assets/icon.png",
   "private": true,
   "license": "MIT",
+  "homepage": "https://github.com/G-TTYg/vscode-doc-translator#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/G-TTYg/vscode-doc-translator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/G-TTYg/vscode-doc-translator/issues"
+  },
+  "keywords": [
+    "translation",
+    "documents",
+    "markdown",
+    "openai",
+    "anthropic",
+    "gemini"
+  ],
   "main": "./dist/extension/extension.js",
   "engines": {
     "vscode": "^1.90.0",
@@ -18,6 +34,7 @@
   "activationEvents": [
     "onCommand:docTranslator.translateCurrentDocument",
     "onCommand:docTranslator.translateFile",
+    "onCommand:docTranslator.setOpenAiApiKey",
     "onCommand:docTranslator.setOpenAiCompatibleApiKey",
     "onCommand:docTranslator.openSettings"
   ],
@@ -30,6 +47,10 @@
       {
         "command": "docTranslator.translateFile",
         "title": "Doc Translator: Translate Document"
+      },
+      {
+        "command": "docTranslator.setOpenAiApiKey",
+        "title": "Doc Translator: Set OpenAI API Key"
       },
       {
         "command": "docTranslator.setOpenAiCompatibleApiKey",
@@ -137,12 +158,15 @@
         "docTranslator.defaultProvider": {
           "type": "string",
           "enum": [
+            "openai-responses",
+            "anthropic",
+            "gemini",
             "openai-compatible",
             "deepl",
             "google",
             "microsoft"
           ],
-          "default": "openai-compatible",
+          "default": "openai-responses",
           "description": "Default translation provider."
         },
         "docTranslator.cache.hiddenDirectoryName": {
@@ -182,15 +206,25 @@
           "default": [],
           "description": "Terms that must remain untranslated."
         },
+        "docTranslator.openai.endpoint": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "OpenAI API base URL used by the Responses provider."
+        },
+        "docTranslator.openai.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model name for the OpenAI Responses provider."
+        },
         "docTranslator.llm.endpoint": {
           "type": "string",
           "default": "https://api.openai.com/v1",
-          "description": "OpenAI-compatible API base URL."
+          "description": "OpenAI-compatible Chat Completions API base URL."
         },
         "docTranslator.llm.model": {
           "type": "string",
           "default": "",
-          "description": "OpenAI-compatible model name."
+          "description": "Model name for the OpenAI-compatible Chat Completions provider."
         },
         "docTranslator.llm.maxContextTokens": {
           "type": "number",
@@ -209,6 +243,26 @@
           "default": 0,
           "minimum": 0,
           "description": "Deprecated compatibility setting. Prefer docTranslator.llm.maxContextTokens."
+        },
+        "docTranslator.anthropic.endpoint": {
+          "type": "string",
+          "default": "https://api.anthropic.com",
+          "description": "Anthropic API base URL used by the Messages provider."
+        },
+        "docTranslator.anthropic.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model name for the Anthropic Messages provider."
+        },
+        "docTranslator.gemini.endpoint": {
+          "type": "string",
+          "default": "https://generativelanguage.googleapis.com/v1beta",
+          "description": "Gemini Developer API base URL including the API version."
+        },
+        "docTranslator.gemini.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model name for the Gemini GenerateContent provider."
         },
         "docTranslator.deepl.endpoint": {
           "type": "string",
@@ -242,7 +296,7 @@
     "compile": "tsc -p tsconfig.json",
     "test": "vitest run",
     "check": "npm run compile && npm test",
-    "package:vsix": "vsce package --allow-missing-repository --out vscode-doc-translator-0.1.1.vsix"
+    "package:vsix": "vsce package --out vscode-doc-translator-0.2.0.vsix"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
