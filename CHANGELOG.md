@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- Made AI protected-token handling success-oriented: normalize common model rewrites, retry only affected units, and complete with a source-preserving fallback when repair still fails.
+- Made Markdown protected tokens unique across the document to avoid conflicting placeholder meanings.
+- Added explicit protected-content mappings and stronger token instructions to AI requests.
+- Show successful translations with warnings instead of failing the whole document for unrepaired protected units.
+
 ## 0.2.1
 
 - Added source-echo detection and one focused repair attempt for all AI providers.

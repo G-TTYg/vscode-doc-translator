@@ -10,7 +10,7 @@ type MatchRange = {
   end: number;
 };
 
-export function protectMarkdownInlineText(text: string): ProtectedText {
+export function protectMarkdownInlineText(text: string, namespace: string | number): ProtectedText {
   const ranges: MatchRange[] = [];
   collectMatches(text, /`[^`\r\n]+`/g, ranges);
   collectMatches(text, /!\[[^\]\r\n]*\]\([^)]+\)/g, ranges);
@@ -30,7 +30,7 @@ export function protectMarkdownInlineText(text: string): ProtectedText {
   for (const range of merged) {
     protectedText += text.slice(cursor, range.start);
     const value = text.slice(range.start, range.end);
-    const token = `__VDT_PROTECTED_${tokens.length}__`;
+    const token = `__VDT_PROTECTED_${namespace}_${tokens.length}__`;
     protectedText += token;
     tokens.push({ token, value });
     cursor = range.end;

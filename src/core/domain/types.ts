@@ -120,6 +120,7 @@ export interface TranslatedUnit {
   readonly id: string;
   readonly text: string;
   readonly skipped?: boolean;
+  readonly preservedSource?: boolean;
 }
 
 export interface TranslateResult {

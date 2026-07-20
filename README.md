@@ -34,6 +34,7 @@ Translation progress appears in the status bar. When complete, the extension can
 - Native OpenAI Responses, Anthropic Messages, and Gemini GenerateContent API adapters.
 - OpenAI-compatible Chat Completions support for compatible services and local gateways.
 - AI quality checks retry source-text echoes once and stop without writing a misleading translation if the repair also fails.
+- AI protected-content recovery accepts preserved tokens, harmless Markdown escaping, or unchanged code/URL values. It retries affected units once; if a token still cannot be recovered, only that unit stays in the source language and the translated document is still created with a warning.
 - DeepL, Google Cloud Translation, and Microsoft Translator adapters.
 - Alphabetically sorted target-language selector with provider-specific language-code mapping.
 - Structure-aware Markdown, MDX, HTML/XML, and plain-text processing.

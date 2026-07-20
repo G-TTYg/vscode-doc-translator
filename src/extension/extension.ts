@@ -213,7 +213,13 @@ async function runTranslate(
         } else {
           translationStatus.succeeded(result);
         }
-        await vscode.window.showInformationMessage(`${suffix} ${result.targetPath}`);
+        if (result.warnings.length > 0 && result.status !== "cached") {
+          await vscode.window.showWarningMessage(
+            `${suffix} Completed with ${result.warnings.length} warning(s). ${result.targetPath}`
+          );
+        } else {
+          await vscode.window.showInformationMessage(`${suffix} ${result.targetPath}`);
+        }
       } catch (error) {
         translationStatus.failed(error);
         await vscode.window.showErrorMessage(`Doc Translator failed: ${errorMessage(error)}`);

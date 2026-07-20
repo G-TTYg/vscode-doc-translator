@@ -40,7 +40,7 @@ interface LineInfo {
 
 export class MarkdownAdapter implements DocumentFormatAdapter<MarkdownDocument> {
   readonly id = "markdown";
-  readonly version = "0.1.0";
+  readonly version = "0.2.0";
 
   canHandle(file: SourceFileInfo): boolean {
     return file.extension === ".md" || file.extension === ".markdown";
@@ -280,7 +280,7 @@ function pushUnit(
     readonly end: number;
   }
 ): number {
-  const protectedText = protectMarkdownInlineText(input.sourceText);
+  const protectedText = protectMarkdownInlineText(input.sourceText, input.order);
   units.push({
     id: createUnitId({
       adapterId: input.adapterId,

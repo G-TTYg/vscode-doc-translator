@@ -26,7 +26,7 @@ export interface MdxDocument extends SpanParsedDocument {
 
 export class MdxAdapter implements DocumentFormatAdapter<MdxDocument> {
   readonly id = "mdx";
-  readonly version = "0.1.0";
+  readonly version = "0.2.0";
 
   canHandle(file: SourceFileInfo): boolean {
     return file.extension === ".mdx";

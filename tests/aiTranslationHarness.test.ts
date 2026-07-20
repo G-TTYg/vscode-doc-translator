@@ -73,6 +73,140 @@ describe("AI translation quality harness", () => {
     ]);
   });
 
+  it("normalizes original and escaped tokens, then retries only genuinely missing tokens", async () => {
+    const requests: Array<{ attempt: string; ids: string[]; body: string }> = [];
+    const context = createProtectedContext();
+    const provider = createProvider(async (_input, init) => {
+      const request = readChatRequest(init);
+      requests.push({ ...request, body: String(init?.body) });
+      if (request.attempt === "initial") {
+        return chatResponse([
+          {
+            id: "unit-0",
+            text: "请先阅读 https://example.com/private 私有文档。",
+            skip: false
+          },
+          {
+            id: "unit-1",
+            text: "运行 \\_\\_VDT\\_PROTECTED\\_1\\_0\\_\\_ 命令。",
+            skip: false
+          },
+          { id: "unit-2", text: "打开组件预览。", skip: false }
+        ]);
+      }
+      return chatResponse([
+        {
+          id: "unit-2",
+          text: "打开 __VDT_PROTECTED_2_0__ 组件预览。",
+          skip: false
+        }
+      ]);
+    });
+
+    const result = await provider.translateBatch(createRequest(context));
+
+    expect(requests.map(({ attempt }) => attempt)).toEqual([
+      "initial",
+      "protected-token-repair"
+    ]);
+    expect(requests[1].ids).toEqual(["unit-2"]);
+    expect(requests[1].body).toContain("https://example.com/private");
+    expect(requests[1].body).toContain("`deploy()`");
+    expect(requests[1].body).toContain("requiredProtectedTokens");
+    expect(result.requestCount).toBe(2);
+    expect(result.translations).toEqual([
+      {
+        id: "unit-0",
+        text: "请先阅读 __VDT_PROTECTED_0_0__ 私有文档。"
+      },
+      {
+        id: "unit-1",
+        text: "运行 __VDT_PROTECTED_1_0__ 命令。"
+      },
+      {
+        id: "unit-2",
+        text: "打开 __VDT_PROTECTED_2_0__ 组件预览。"
+      }
+    ]);
+  });
+
+  it("reconstructs translated Markdown when the model returns original protected values", async () => {
+    const directory = await createTempDirectory();
+    const sourcePath = path.join(directory, "original-values.md");
+    await fs.writeFile(
+      sourcePath,
+      "Read [private docs](https://example.com/private) before running `deploy()`.\n",
+      "utf8"
+    );
+    let requestCount = 0;
+    const provider = createProvider(async (_input, init) => {
+      requestCount += 1;
+      const request = readChatRequest(init);
+      return chatResponse([
+        {
+          id: request.ids[0],
+          text: "请先阅读[私有文档](https://example.com/private)，然后运行 `deploy()`。",
+          skip: false
+        }
+      ]);
+    });
+
+    const result = await translateDocument({ sourcePath, targetLanguage: "zh-CN", provider });
+    const translated = await fs.readFile(result.targetPath, "utf8");
+
+    expect(requestCount).toBe(1);
+    expect(translated).toBe(
+      "请先阅读[私有文档](https://example.com/private)，然后运行 `deploy()`。\n"
+    );
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("keeps only unrepaired protected units in source while completing the document", async () => {
+    const directory = await createTempDirectory();
+    const sourcePath = path.join(directory, "protected.md");
+    await fs.writeFile(
+      sourcePath,
+      [
+        "This overview explains the deployment workflow for contributors.",
+        "",
+        "Read [private docs](https://example.com/private) before running `deploy()`."
+      ].join("\n"),
+      "utf8"
+    );
+    let requestCount = 0;
+    const provider = createProvider(async (_input, init) => {
+      requestCount += 1;
+      const request = readChatRequest(init);
+      const body = readChatBody(init);
+      const payload = JSON.parse(body.messages[1].content) as {
+        referenceDocument: { units: Array<{ id: string; sourceText: string }> };
+      };
+      const sourceById = new Map(
+        payload.referenceDocument.units.map((unit) => [unit.id, unit.sourceText])
+      );
+      return chatResponse(request.ids.map((id) => ({
+        id,
+        text: sourceById.get(id)?.includes("VDT_PROTECTED")
+          ? "请先阅读私有文档，然后运行部署命令。"
+          : "本概述介绍面向贡献者的部署工作流。",
+        skip: false
+      })));
+    });
+
+    const result = await translateDocument({ sourcePath, targetLanguage: "zh-CN", provider });
+    const translated = await fs.readFile(result.targetPath, "utf8");
+
+    expect(result.status).toBe("translated");
+    expect(requestCount).toBe(2);
+    expect(translated).toContain("本概述介绍面向贡献者的部署工作流。");
+    expect(translated).toContain(
+      "Read [private docs](https://example.com/private) before running `deploy()`."
+    );
+    expect(result.warnings.join("\n")).toContain(
+      "kept source text for 1 unit(s) whose protected content could not be repaired"
+    );
+  });
+
   it("rejects repeated source echo before writing a translated artifact", async () => {
     const directory = await createTempDirectory();
     const sourcePath = path.join(directory, "roadmap.md");
@@ -168,7 +302,7 @@ describe("AI translation quality harness", () => {
     expect(first.metadata.provider.modelOrApiVersion).toBe("model-a");
     expect(second.metadata.provider.modelOrApiVersion).toBe("model-b");
     expect(second.metadata.provider.endpointLabel).toBe("https://example.test/v1");
-    expect(second.metadata.provider.harnessVersion).toBe("2");
+    expect(second.metadata.provider.harnessVersion).toBe("3");
     expect(second.metadata.profile.hash).not.toBe(first.metadata.profile.hash);
   });
 });
@@ -197,6 +331,40 @@ function createContext(texts: readonly string[]): OrderedDocumentContext {
       sourceText,
       protectedTokens: []
     }))
+  };
+}
+
+function createProtectedContext(): OrderedDocumentContext {
+  return {
+    documentId: "protected-token-test",
+    sourceLanguage: "auto",
+    targetLanguage: "zh-CN",
+    format: "markdown",
+    units: [
+      {
+        id: "unit-0",
+        order: 0,
+        kind: "paragraph",
+        sourceText: "Read __VDT_PROTECTED_0_0__ before continuing.",
+        protectedTokens: [
+          { token: "__VDT_PROTECTED_0_0__", value: "https://example.com/private" }
+        ]
+      },
+      {
+        id: "unit-1",
+        order: 1,
+        kind: "paragraph",
+        sourceText: "Run __VDT_PROTECTED_1_0__ to deploy the project.",
+        protectedTokens: [{ token: "__VDT_PROTECTED_1_0__", value: "`deploy()`" }]
+      },
+      {
+        id: "unit-2",
+        order: 2,
+        kind: "paragraph",
+        sourceText: "Open __VDT_PROTECTED_2_0__ to preview the component.",
+        protectedTokens: [{ token: "__VDT_PROTECTED_2_0__", value: "<Widget />" }]
+      }
+    ]
   };
 }
 

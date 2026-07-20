@@ -10,7 +10,10 @@ import {
   AI_TRANSLATION_HARNESS_VERSION,
   type LlmTranslationAttempt,
   assertAcceptableUnchangedRatio,
+  inspectProtectedTokens,
   inspectUnchangedTranslations,
+  normalizeProtectedTokenFormatting,
+  protectedTokenWarning,
   replaceTranslations,
   shouldRepairUnchangedTranslations,
   unchangedTranslationWarning
@@ -138,10 +141,52 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
       }
     }
 
-    let orderedTranslations = orderedKnownTranslations(
-      translations,
-      chunk.translationUnitIds
-    );
+    let orderedTranslations = normalizeProtectedTokenFormatting({
+      contextUnits: chunk.context.units,
+      translations: orderedKnownTranslations(translations, chunk.translationUnitIds)
+    });
+    let protectedTokenRepairAttempted = false;
+
+    const repairProtectedTokens = async (report: ReturnType<typeof inspectProtectedTokens>) => {
+      warnings.push(protectedTokenWarning(report, this.displayName, "retrying"));
+      const repairTranslations = await this.requestChunkTranslations(
+        request,
+        withTranslationUnitIds(chunk, report.affectedUnitIds),
+        "protected-token-repair"
+      );
+      requestCount += 1;
+      protectedTokenRepairAttempted = true;
+      warnings.push(
+        ...collectChunkWarnings(repairTranslations, report.affectedUnitIds, this.displayName)
+      );
+      const omittedRepairIds = missingTranslationUnitIds(
+        report.affectedUnitIds,
+        repairTranslations
+      );
+      if (omittedRepairIds.length > 0) {
+        warnings.push(
+          `${this.displayName} omitted protected-token repair id(s): ${omittedRepairIds.join(", ")}`
+        );
+      }
+      orderedTranslations = normalizeProtectedTokenFormatting({
+        contextUnits: chunk.context.units,
+        translations: replaceTranslations(
+          orderedTranslations,
+          repairTranslations,
+          chunk.translationUnitIds
+        )
+      });
+    };
+
+    const protectedTokenReport = inspectProtectedTokens({
+      expectedUnitIds: chunk.translationUnitIds,
+      contextUnits: chunk.context.units,
+      translations: orderedTranslations
+    });
+    if (protectedTokenReport.violationCount > 0) {
+      await repairProtectedTokens(protectedTokenReport);
+    }
+
     const unchangedReport = inspectUnchangedTranslations({
       sourceLanguage: request.sourceLanguage,
       targetLanguage: request.targetLanguage,
@@ -174,10 +219,43 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
           `${this.displayName} omitted unchanged-text repair id(s): ${omittedRepairIds.join(", ")}`
         );
       }
-      orderedTranslations = replaceTranslations(
+      orderedTranslations = normalizeProtectedTokenFormatting({
+        contextUnits: chunk.context.units,
+        translations: replaceTranslations(
+          orderedTranslations,
+          repairTranslations,
+          chunk.translationUnitIds
+        )
+      });
+    }
+
+    let finalProtectedTokenReport = inspectProtectedTokens({
+      expectedUnitIds: chunk.translationUnitIds,
+      contextUnits: chunk.context.units,
+      translations: orderedTranslations
+    });
+    if (finalProtectedTokenReport.violationCount > 0 && !protectedTokenRepairAttempted) {
+      await repairProtectedTokens(finalProtectedTokenReport);
+      finalProtectedTokenReport = inspectProtectedTokens({
+        expectedUnitIds: chunk.translationUnitIds,
+        contextUnits: chunk.context.units,
+        translations: orderedTranslations
+      });
+    }
+    if (finalProtectedTokenReport.violationCount > 0) {
+      warnings.push(
+        protectedTokenWarning(finalProtectedTokenReport, this.displayName, "remaining")
+      );
+      // Preserve structure locally instead of discarding successful translations from other units.
+      orderedTranslations = preserveSourceForUnits(
         orderedTranslations,
-        repairTranslations,
+        chunk.context.units,
+        finalProtectedTokenReport.affectedUnitIds,
         chunk.translationUnitIds
+      );
+      warnings.push(
+        `${this.displayName} kept source text for ${finalProtectedTokenReport.affectedUnitIds.length} ` +
+          "unit(s) whose protected content could not be repaired; the rest of the document was translated."
       );
     }
 
@@ -224,7 +302,7 @@ export interface AiTranslationPayload {
   readonly sourceLanguage: string | "auto";
   readonly targetLanguage: string;
   readonly instructions: readonly string[];
-  readonly referenceDocument: OrderedDocumentContext;
+  readonly referenceDocument: AiReferenceDocument;
   readonly translationUnitIds: readonly string[];
   readonly outputSchema: {
     readonly translations: readonly [
@@ -235,6 +313,24 @@ export interface AiTranslationPayload {
       }
     ];
   };
+}
+
+export interface AiReferenceDocument {
+  readonly documentId: string;
+  readonly sourceLanguage: string | "auto";
+  readonly targetLanguage: string;
+  readonly format: string;
+  readonly units: readonly {
+    readonly id: string;
+    readonly order: number;
+    readonly kind: OrderedContextUnit["kind"];
+    readonly sourceText: string;
+    readonly requiredProtectedTokens: readonly string[];
+    readonly protectedContent: readonly {
+      readonly token: string;
+      readonly originalText: string;
+    }[];
+  }[];
 }
 
 interface ChunkTranslationResult {
@@ -307,11 +403,14 @@ export function createAiTranslationPayload(input: {
       "Return exactly one translations item for every id in translationUnitIds.",
       "Do not copy source wording instead of translating it.",
       "Use skip: true only for content without translatable natural language or content already in the target language.",
+      "Copy every requiredProtectedTokens entry for each requested unit into its translated text exactly once.",
+      "Use protectedContent only to understand the source; return its token rather than originalText.",
+      "Never escape or wrap a protected token.",
       attemptInstruction(input.attempt),
       "Translate only ids from translationUnitIds; referenceDocument.units is context only.",
       "Preserve protected token strings exactly."
     ],
-    referenceDocument: input.referenceDocument,
+    referenceDocument: createAiReferenceDocument(input.referenceDocument),
     translationUnitIds: input.translationUnitIds,
     outputSchema: {
       translations: [
@@ -534,6 +633,27 @@ function withTranslationUnitIds(
   };
 }
 
+function preserveSourceForUnits(
+  translations: readonly TranslatedUnit[],
+  contextUnits: readonly OrderedContextUnit[],
+  affectedUnitIds: readonly string[],
+  expectedIds: readonly string[]
+): readonly TranslatedUnit[] {
+  const affected = new Set(affectedUnitIds);
+  const sourceById = new Map(contextUnits.map((unit) => [unit.id, unit.sourceText]));
+  const replacements = affectedUnitIds.flatMap((id) => {
+    const sourceText = sourceById.get(id);
+    return sourceText === undefined
+      ? []
+      : [{ id, text: sourceText, preservedSource: true } satisfies TranslatedUnit];
+  });
+  return replaceTranslations(
+    translations.filter((translation) => !affected.has(translation.id)),
+    replacements,
+    expectedIds
+  );
+}
+
 export function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -679,9 +799,31 @@ function attemptInstruction(attempt: LlmTranslationAttempt): string {
       return "This is a completeness repair. Return every requested id that was previously omitted.";
     case "unchanged-repair":
       return "This is a quality repair. The previous response echoed source text; translate every requested id now.";
+    case "protected-token-repair":
+      return "This is a token repair. Preserve every required protected token exactly once while translating the surrounding text.";
     default:
       return "This is the initial translation attempt.";
   }
+}
+
+function createAiReferenceDocument(context: OrderedDocumentContext): AiReferenceDocument {
+  return {
+    documentId: context.documentId,
+    sourceLanguage: context.sourceLanguage,
+    targetLanguage: context.targetLanguage,
+    format: context.format,
+    units: context.units.map((unit) => ({
+      id: unit.id,
+      order: unit.order,
+      kind: unit.kind,
+      sourceText: unit.sourceText,
+      requiredProtectedTokens: unit.protectedTokens.map(({ token }) => token),
+      protectedContent: unit.protectedTokens.map(({ token, value }) => ({
+        token,
+        originalText: value
+      }))
+    }))
+  };
 }
 
 function estimateOutputTokens(

@@ -34,6 +34,7 @@ API Key 保存在 VS Code SecretStorage 中。通常不需要手动编辑 `setti
 - 原生支持 OpenAI Responses、Anthropic Messages 和 Gemini GenerateContent API。
 - 支持 OpenAI-compatible Chat Completions 接口和本地兼容网关。
 - AI 质量检查会对大面积原文回显定向重试一次；修复仍失败时停止并且不写入误导性的“译文”。
+- AI 保护内容恢复可识别原样 token、Markdown 转义 token 以及未改动的代码/URL 原值，并只重试受影响段落一次；仍无法恢复时仅保留该段原文，整份译文继续生成并显示 warning。
 - 支持 DeepL、Google Cloud Translation 和 Microsoft Translator。
 - 目标语言下拉列表按字母顺序排列，并自动转换不同供应商的语言代码。
 - 支持 Markdown、MDX、HTML/XML 和纯文本的结构化处理。
