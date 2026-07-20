@@ -4,3 +4,11 @@ dist/
 .vscode-test/
 coverage/
 .vscode-doc-translator-cache/
+
+# Local agent/project-management state and generated translations.
+AGENTS.md
+logs/
+docs/agent-runs/
+.codex/
+.claude/
+*.auto.*
