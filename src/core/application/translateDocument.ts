@@ -26,7 +26,7 @@ import {
   writeMetadata
 } from "./metadataStore";
 
-const CORE_VERSION = "0.1.0";
+export const CORE_VERSION = "0.2.1";
 
 export async function translateDocument(
   options: TranslateDocumentOptions
@@ -37,6 +37,17 @@ export async function translateDocument(
   const outputDirectoryMode = options.outputDirectoryMode ?? "same-dir";
   const sourceLanguage = options.sourceLanguage ?? "auto";
   const now = options.now ?? new Date();
+  const adapter = selectFormatAdapter(sourcePath);
+  const markdownHeaderInserted =
+    adapter.id === "markdown" && Boolean(options.insertMarkdownHeader);
+  const profileHash = createTranslationProfileHash({
+    options,
+    sourceLanguage,
+    outputDirectoryMode,
+    adapterId: adapter.id,
+    adapterVersion: adapter.version,
+    markdownHeaderInserted
+  });
 
   const sourceBytes = await fs.readFile(sourcePath);
   const sourceHash = sha256Hex(sourceBytes);
@@ -53,6 +64,7 @@ export async function translateDocument(
       sourceHash,
       targetLanguage: options.targetLanguage,
       providerId: options.provider.id,
+      profileHash,
       outputDirectoryMode,
       cacheDirectoryName
     });
@@ -79,7 +91,6 @@ export async function translateDocument(
     progress: 15
   });
   const sourceText = stripUtf8Bom(sourceBytes.toString("utf8"));
-  const adapter = selectFormatAdapter(sourcePath);
   const parsed = await adapter.parse({ sourcePath, text: sourceText });
   const extractedUnits = await adapter.extractUnits(parsed);
   const termLocked = applyTermLocks(extractedUnits, options.termLocks ?? []);
@@ -131,8 +142,6 @@ export async function translateDocument(
   }
 
   const reconstructed = await adapter.reconstruct(parsed, translatedUnits);
-  const markdownHeaderInserted =
-    adapter.id === "markdown" && Boolean(options.insertMarkdownHeader);
   const translatedText = markdownHeaderInserted
     ? `<!-- Auto-translated by VSCode Doc Translator. Metadata is stored in ${cacheDirectoryName}. -->\n\n${reconstructed.text}`
     : reconstructed.text;
@@ -213,6 +222,9 @@ export async function translateDocument(
     },
     provider: {
       id: options.provider.id,
+      modelOrApiVersion: options.provider.modelOrApiVersion,
+      endpointLabel: options.provider.endpointLabel,
+      harnessVersion: options.provider.harnessVersion,
       requestPackaging: options.provider.capabilities.requestPackaging,
       maxContextCharacters: options.provider.capabilities.maxContextCharacters,
       maxContextTokens: options.provider.capabilities.maxContextTokens,
@@ -220,15 +232,7 @@ export async function translateDocument(
     },
     profile: {
       name: options.profileName ?? "default",
-      hash: sha256Hex(
-        JSON.stringify({
-          provider: options.provider.id,
-          targetLanguage: options.targetLanguage,
-          outputDirectoryMode,
-          insertMarkdownHeader: markdownHeaderInserted,
-          termLocks: options.termLocks ?? []
-        })
-      )
+      hash: profileHash
     },
     pipeline: {
       coreVersion: CORE_VERSION,
@@ -320,4 +324,26 @@ function outputDirectoryPath(
   return outputDirectoryMode === "hidden-cache"
     ? path.join(sourceDirectory, cacheDirectoryName)
     : sourceDirectory;
+}
+
+function createTranslationProfileHash(input: {
+  readonly options: TranslateDocumentOptions;
+  readonly sourceLanguage: string | "auto";
+  readonly outputDirectoryMode: OutputDirectoryMode;
+  readonly adapterId: string;
+  readonly adapterVersion: string;
+  readonly markdownHeaderInserted: boolean;
+}): string {
+  return sha256Hex(
+    JSON.stringify({
+      coreVersion: CORE_VERSION,
+      provider: input.options.provider.cacheIdentity ?? input.options.provider.id,
+      sourceLanguage: input.sourceLanguage,
+      targetLanguage: input.options.targetLanguage,
+      outputDirectoryMode: input.outputDirectoryMode,
+      formatAdapter: `${input.adapterId}@${input.adapterVersion}`,
+      insertMarkdownHeader: input.markdownHeaderInserted,
+      termLocks: input.options.termLocks ?? []
+    })
+  );
 }

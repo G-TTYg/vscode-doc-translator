@@ -38,7 +38,7 @@ describe("OpenAI-compatible chunking", () => {
       "f".repeat(180)
     ]);
 
-    const chunks = chunkOrderedDocumentContext(context, 2000);
+    const chunks = chunkOrderedDocumentContext(context, 2400);
     const chunkWithReference = chunks.find(
       (chunk) => chunk.context.units.length > chunk.translationUnitIds.length
     );
@@ -157,7 +157,7 @@ describe("OpenAI-compatible chunking", () => {
 
     expect(translations).toEqual([
       { id: "unit-0", text: "translated" },
-      { id: "unit-1", text: "Keep as-is" }
+      { id: "unit-1", text: "Keep as-is", skipped: true }
     ]);
   });
 
@@ -219,7 +219,7 @@ describe("OpenAI-compatible chunking", () => {
     expect(result.translations).toEqual([
       { id: "unit-0", text: "translated unit-0" },
       { id: "unit-1", text: "repaired unit-1" },
-      { id: "unit-2", text: "third" }
+      { id: "unit-2", text: "third", skipped: true }
     ]);
   });
 });

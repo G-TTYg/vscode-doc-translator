@@ -1,11 +1,16 @@
 import type { TranslateRequest, TranslatedUnit } from "../domain/types";
 import { fetchWithRetry, readErrorBody } from "./http";
 import {
+  type LlmTranslationAttempt,
+  createLlmProviderCacheIdentity,
+  createTranslationSystemPrompt,
+  safeEndpointLabel
+} from "./aiTranslationHarness";
+import {
   StructuredLlmProvider,
   type StructuredLlmProviderOptions,
   type OrderedContextChunk,
   TRANSLATION_RESPONSE_JSON_SCHEMA,
-  TRANSLATION_SYSTEM_PROMPT,
   createAiTranslationPayload,
   createSourceTextMap,
   parseTranslations,
@@ -22,17 +27,29 @@ export interface GeminiProviderOptions extends StructuredLlmProviderOptions {
 export class GeminiProvider extends StructuredLlmProvider {
   readonly id = "gemini";
   readonly displayName = "Gemini GenerateContent API";
+  readonly modelOrApiVersion: string;
+  readonly endpointLabel: string;
+  readonly cacheIdentity: string;
 
   constructor(private readonly providerOptions: GeminiProviderOptions) {
     super(providerOptions);
     requireOption(providerOptions.endpoint, "Gemini endpoint");
     requireOption(providerOptions.apiKey, "Gemini API key");
     requireOption(providerOptions.model, "Gemini model");
+    this.modelOrApiVersion = providerOptions.model;
+    this.endpointLabel = safeEndpointLabel(providerOptions.endpoint);
+    this.cacheIdentity = createLlmProviderCacheIdentity({
+      providerId: this.id,
+      endpoint: providerOptions.endpoint,
+      model: providerOptions.model,
+      capabilities: this.capabilities
+    });
   }
 
   protected async requestChunkTranslations(
     request: TranslateRequest,
-    chunk: OrderedContextChunk
+    chunk: OrderedContextChunk,
+    attempt: LlmTranslationAttempt
   ): Promise<readonly TranslatedUnit[]> {
     const response = await fetchWithRetry(
       this.providerOptions.fetch ?? fetch,
@@ -45,7 +62,7 @@ export class GeminiProvider extends StructuredLlmProvider {
         },
         body: JSON.stringify({
           systemInstruction: {
-            parts: [{ text: TRANSLATION_SYSTEM_PROMPT }]
+            parts: [{ text: createTranslationSystemPrompt(request.targetLanguage, attempt) }]
           },
           contents: [
             {
@@ -54,6 +71,7 @@ export class GeminiProvider extends StructuredLlmProvider {
                 {
                   text: JSON.stringify(
                     createAiTranslationPayload({
+                      attempt,
                       sourceLanguage: request.sourceLanguage,
                       targetLanguage: request.targetLanguage,
                       referenceDocument: chunk.context,

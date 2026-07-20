@@ -119,6 +119,7 @@ export interface TranslateRequest {
 export interface TranslatedUnit {
   readonly id: string;
   readonly text: string;
+  readonly skipped?: boolean;
 }
 
 export interface TranslateResult {
@@ -131,6 +132,10 @@ export interface TranslationProvider {
   readonly id: string;
   readonly displayName: string;
   readonly capabilities: ProviderCapabilities;
+  readonly cacheIdentity?: string;
+  readonly modelOrApiVersion?: string;
+  readonly endpointLabel?: string;
+  readonly harnessVersion?: string;
   translateBatch(request: TranslateRequest): Promise<TranslateResult>;
 }
 
@@ -163,6 +168,7 @@ export interface TranslationMetadata {
     readonly id: string;
     readonly modelOrApiVersion?: string;
     readonly endpointLabel?: string;
+    readonly harnessVersion?: string;
     readonly requestPackaging: TranslationRequestPackaging;
     readonly maxContextCharacters?: number;
     readonly maxContextTokens?: number;

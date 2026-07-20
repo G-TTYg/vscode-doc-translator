@@ -13,6 +13,7 @@ export interface FreshTranslationQuery {
   readonly sourceHash: string;
   readonly targetLanguage: string;
   readonly providerId: string;
+  readonly profileHash: string;
   readonly outputDirectoryMode?: OutputDirectoryMode;
   readonly cacheDirectoryName?: string;
 }
@@ -63,6 +64,7 @@ export async function findFreshTranslation(
       metadata.source.sha256 !== query.sourceHash ||
       metadata.target.language !== query.targetLanguage ||
       metadata.provider.id !== query.providerId ||
+      metadata.profile.hash !== query.profileHash ||
       inferOutputDirectoryMode(metadata, query.cacheDirectoryName) !==
         (query.outputDirectoryMode ?? "same-dir")
     ) {

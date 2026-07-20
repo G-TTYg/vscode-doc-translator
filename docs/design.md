@@ -55,7 +55,7 @@
 | Provider 类型 | 输入策略 | 输出要求 | 重建方式 |
 | --- | --- | --- | --- |
 | 传统机器翻译：Google、DeepL、Microsoft | 格式适配器抽取 translation units，按段落或语义块分批翻译。 | 返回每个 unit 的译文，顺序和数量必须与请求一致，或显式带 id。 | 使用 unit id/顺序把译文放回原 AST/文本结构。 |
-| AI/LLM：OpenAI Responses、Anthropic、Gemini、OpenAI-compatible | 格式适配器生成按原文顺序排列的全文 JSON 上下文；共享 LLM 管线再按模型最大上下文构造滑动窗口，供应商适配器只负责各自 HTTP 协议。 | 请求中 `referenceDocument.units` 是参考上下文，`translationUnitIds` 是目标翻译 id；输出格式化扁平 JSON。每个目标 id 必须出现；如果某个 unit 不需要翻译，应显式返回 `skip`。共享管线会恢复被包裹的 JSON，并对缺失 id 发起一次只包含缺失 unit 的补请求。 | 校验 id 完整性、重复、缺失和 protected token 后，由格式适配器重建译文文档。 |
+| AI/LLM：OpenAI Responses、Anthropic、Gemini、OpenAI-compatible | 格式适配器生成按原文顺序排列的全文 JSON 上下文；共享 LLM 管线再按模型最大上下文构造滑动窗口，供应商适配器只负责各自 HTTP 协议。 | 请求中 `referenceDocument.units` 是参考上下文，`translationUnitIds` 是目标翻译 id；输出格式化扁平 JSON。每个目标 id 必须出现；只有无自然语言或已经是目标语言时才可显式返回 `skip`。共享管线会恢复被包裹的 JSON，对缺失 id 发起一次补请求，并对大面积原文回显发起一次定向质量修复。 | 校验 id 完整性、重复、缺失、protected token 和原文回显比例后，由格式适配器重建译文文档；质量修复仍失败时不写译文。 |
 
 AI/LLM 不能直接输出最终 Markdown 或最终纯文本文件，因为这样很难可靠保留格式。它可以看到按原文档顺序组织的完整文本上下文，但只能把每个 id 的译文交回核心流程。
 
@@ -244,7 +244,7 @@ metadata 不能包含 API Key 或 Bearer Token。可以包含 provider id、endp
 - 源文档 stale：当前源文件 hash 不等于 `metadata.source.sha256`。
 - 译文未被编辑：当前译文文件 hash 等于 `metadata.target.sha256`。
 - 译文已被编辑：当前译文文件 hash 不等于 `metadata.target.sha256`。工具不能静默覆盖它。
-- 当源文档未变化、目标语言一致、provider 一致、输出模式一致且译文未被编辑，插件可直接打开缓存译文。
+- 当源文档未变化、目标语言一致、provider profile hash 一致、输出模式一致且译文未被编辑，插件可直接打开缓存译文。AI profile 必须包含 endpoint label、model、token 预算和 harness version；全局 profile 还包含 core version 与格式适配器版本。
 - 当源文档已变化，默认创建新的译文文件。未来可以用 segment-level cache 复用未变化的 unit。
 - 可选设置 `docTranslator.cache.deleteStaleAutoTranslations` 默认为关闭。开启后，插件在新译文成功创建时清理同一源文件、目标语言、provider 和输出模式下的旧自动译文；只有旧译文当前 hash 仍等于 metadata 记录的 target hash 时才会删除，已被用户编辑的译文必须保留。
 
@@ -348,7 +348,7 @@ Secrets：
 ### Phase 2：质量与范围
 
 - 已完成：补齐 Google、DeepL、Microsoft provider 适配器；仍需真实 API 凭据下 live 验证。
-- 已部分完成：为 `accurate` profile 添加 LLM review/repair pass；当前已具备 protected-token 校验，自动二次 repair 仍待实现。
+- 已部分完成：为 `accurate` profile 添加 LLM review/repair pass；当前已具备 protected-token 校验和大面积原文回显的自动定向 repair，更广泛的术语与语义复核仍待实现。
 - 已完成：支持 term lock，用户可配置不翻译术语。
 - 已完成：支持 HTML/XML 和 MDX 适配器第一版。
 - 已部分完成：大文件 AI 分块和 provider retry；取消、恢复和更细粒度进度仍待实现。

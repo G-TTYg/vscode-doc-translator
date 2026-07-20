@@ -6,6 +6,15 @@ import type {
   TranslationProvider,
   TranslatedUnit
 } from "../domain/types";
+import {
+  AI_TRANSLATION_HARNESS_VERSION,
+  type LlmTranslationAttempt,
+  assertAcceptableUnchangedRatio,
+  inspectUnchangedTranslations,
+  replaceTranslations,
+  shouldRepairUnchangedTranslations,
+  unchangedTranslationWarning
+} from "./aiTranslationHarness";
 
 export interface StructuredLlmProviderOptions {
   readonly maxContextCharacters?: number;
@@ -21,14 +30,6 @@ const DEFAULT_CHARACTERS_PER_TOKEN = 4;
 const PROMPT_OVERHEAD_TOKENS = 1200;
 const TRANSLATION_OUTPUT_EXPANSION = 1.8;
 
-export const TRANSLATION_SYSTEM_PROMPT =
-  "You are a document translation engine. Use referenceDocument only for context. " +
-  "Translate only units whose ids are listed in translationUnitIds. Return exactly one " +
-  "translations item for every requested id and preserve protected token strings exactly. " +
-  "Each item must contain id, text, and skip. Set skip to false and text to the translation, " +
-  "or set skip to true when the source should remain unchanged. Return only the requested " +
-  "JSON object. Do not render a final document.";
-
 export const TRANSLATION_RESPONSE_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -39,9 +40,16 @@ export const TRANSLATION_RESPONSE_JSON_SCHEMA = {
         type: "object",
         additionalProperties: false,
         properties: {
-          id: { type: "string" },
-          text: { type: "string" },
-          skip: { type: "boolean" }
+          id: { type: "string", description: "One exact id from translationUnitIds." },
+          text: {
+            type: "string",
+            description: "Target-language translation with protected tokens preserved exactly."
+          },
+          skip: {
+            type: "boolean",
+            description:
+              "True only when the unit has no translatable natural language or is already in the target language."
+          }
         },
         required: ["id", "text", "skip"]
       }
@@ -54,6 +62,7 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
   abstract readonly id: string;
   abstract readonly displayName: string;
   readonly capabilities;
+  readonly harnessVersion = AI_TRANSLATION_HARNESS_VERSION;
 
   protected constructor(protected readonly options: StructuredLlmProviderOptions) {
     this.capabilities = {
@@ -101,7 +110,7 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
     request: TranslateRequest,
     chunk: OrderedContextChunk
   ): Promise<ChunkTranslationResult> {
-    const firstAttempt = await this.requestChunkTranslations(request, chunk);
+    const firstAttempt = await this.requestChunkTranslations(request, chunk, "initial");
     const warnings: string[] = [
       ...collectChunkWarnings(firstAttempt, chunk.translationUnitIds, this.displayName)
     ];
@@ -115,7 +124,8 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
       );
       const repairTranslations = await this.requestChunkTranslations(
         request,
-        withTranslationUnitIds(chunk, missingIds)
+        withTranslationUnitIds(chunk, missingIds),
+        "missing-repair"
       );
       requestCount += 1;
       warnings.push(...collectChunkWarnings(repairTranslations, missingIds, this.displayName));
@@ -128,8 +138,65 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
       }
     }
 
+    let orderedTranslations = orderedKnownTranslations(
+      translations,
+      chunk.translationUnitIds
+    );
+    const unchangedReport = inspectUnchangedTranslations({
+      sourceLanguage: request.sourceLanguage,
+      targetLanguage: request.targetLanguage,
+      expectedUnitIds: chunk.translationUnitIds,
+      contextUnits: chunk.context.units,
+      translations: orderedTranslations
+    });
+
+    if (shouldRepairUnchangedTranslations(unchangedReport)) {
+      warnings.push(unchangedTranslationWarning(unchangedReport, this.displayName, "retrying"));
+      const repairTranslations = await this.requestChunkTranslations(
+        request,
+        withTranslationUnitIds(chunk, unchangedReport.unchangedUnitIds),
+        "unchanged-repair"
+      );
+      requestCount += 1;
+      warnings.push(
+        ...collectChunkWarnings(
+          repairTranslations,
+          unchangedReport.unchangedUnitIds,
+          this.displayName
+        )
+      );
+      const omittedRepairIds = missingTranslationUnitIds(
+        unchangedReport.unchangedUnitIds,
+        repairTranslations
+      );
+      if (omittedRepairIds.length > 0) {
+        warnings.push(
+          `${this.displayName} omitted unchanged-text repair id(s): ${omittedRepairIds.join(", ")}`
+        );
+      }
+      orderedTranslations = replaceTranslations(
+        orderedTranslations,
+        repairTranslations,
+        chunk.translationUnitIds
+      );
+    }
+
+    const finalUnchangedReport = inspectUnchangedTranslations({
+      sourceLanguage: request.sourceLanguage,
+      targetLanguage: request.targetLanguage,
+      expectedUnitIds: chunk.translationUnitIds,
+      contextUnits: chunk.context.units,
+      translations: orderedTranslations
+    });
+    if (finalUnchangedReport.unchangedUnitIds.length > 0) {
+      warnings.push(
+        unchangedTranslationWarning(finalUnchangedReport, this.displayName, "remaining")
+      );
+    }
+    assertAcceptableUnchangedRatio(finalUnchangedReport, this.displayName);
+
     return {
-      translations: orderedKnownTranslations(translations, chunk.translationUnitIds),
+      translations: orderedTranslations,
       warnings,
       requestCount
     };
@@ -137,7 +204,8 @@ export abstract class StructuredLlmProvider implements TranslationProvider {
 
   protected abstract requestChunkTranslations(
     request: TranslateRequest,
-    chunk: OrderedContextChunk
+    chunk: OrderedContextChunk,
+    attempt: LlmTranslationAttempt
   ): Promise<readonly TranslatedUnit[]>;
 }
 
@@ -152,6 +220,7 @@ export interface OrderedContextChunk {
 }
 
 export interface AiTranslationPayload {
+  readonly attempt: LlmTranslationAttempt;
   readonly sourceLanguage: string | "auto";
   readonly targetLanguage: string;
   readonly instructions: readonly string[];
@@ -162,7 +231,7 @@ export interface AiTranslationPayload {
       {
         readonly id: "one id from translationUnitIds";
         readonly text: "translated text preserving protected tokens";
-        readonly skip: "optional true only when the source text should remain unchanged";
+        readonly skip: "true only for non-language content or text already in the target language";
       }
     ];
   };
@@ -223,17 +292,22 @@ export function chunkOrderedDocumentContext(
 }
 
 export function createAiTranslationPayload(input: {
+  readonly attempt: LlmTranslationAttempt;
   readonly sourceLanguage: string | "auto";
   readonly targetLanguage: string;
   readonly referenceDocument: OrderedDocumentContext;
   readonly translationUnitIds: readonly string[];
 }): AiTranslationPayload {
   return {
+    attempt: input.attempt,
     sourceLanguage: input.sourceLanguage,
     targetLanguage: input.targetLanguage,
     instructions: [
+      `Translate all natural-language content for the requested ids into ${input.targetLanguage}.`,
       "Return exactly one translations item for every id in translationUnitIds.",
-      "Do not omit any id. If no translation is needed, include that id with skip: true.",
+      "Do not copy source wording instead of translating it.",
+      "Use skip: true only for content without translatable natural language or content already in the target language.",
+      attemptInstruction(input.attempt),
       "Translate only ids from translationUnitIds; referenceDocument.units is context only.",
       "Preserve protected token strings exactly."
     ],
@@ -244,7 +318,7 @@ export function createAiTranslationPayload(input: {
         {
           id: "one id from translationUnitIds",
           text: "translated text preserving protected tokens",
-          skip: "optional true only when the source text should remain unchanged"
+          skip: "true only for non-language content or text already in the target language"
         }
       ]
     }
@@ -285,7 +359,8 @@ export function parseTranslations(
       }
       return {
         id: item.id,
-        text: sourceText
+        text: sourceText,
+        skipped: true
       };
     }
     if (typeof item.text !== "string") {
@@ -588,6 +663,7 @@ function estimatePayloadTokens(
 ): number {
   const characters = JSON.stringify(
     createAiTranslationPayload({
+      attempt: "initial",
       sourceLanguage: context.sourceLanguage,
       targetLanguage: context.targetLanguage,
       referenceDocument: withUnits(context, referenceUnits),
@@ -595,6 +671,17 @@ function estimatePayloadTokens(
     })
   ).length;
   return estimateTokensFromCharacters(characters, budget.charactersPerToken);
+}
+
+function attemptInstruction(attempt: LlmTranslationAttempt): string {
+  switch (attempt) {
+    case "missing-repair":
+      return "This is a completeness repair. Return every requested id that was previously omitted.";
+    case "unchanged-repair":
+      return "This is a quality repair. The previous response echoed source text; translate every requested id now.";
+    default:
+      return "This is the initial translation attempt.";
+  }
 }
 
 function estimateOutputTokens(

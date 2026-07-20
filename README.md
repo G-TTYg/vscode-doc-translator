@@ -33,6 +33,7 @@ Translation progress appears in the status bar. When complete, the extension can
 - Whole-document translation from the editor, Explorer, or Command Palette.
 - Native OpenAI Responses, Anthropic Messages, and Gemini GenerateContent API adapters.
 - OpenAI-compatible Chat Completions support for compatible services and local gateways.
+- AI quality checks retry source-text echoes once and stop without writing a misleading translation if the repair also fails.
 - DeepL, Google Cloud Translation, and Microsoft Translator adapters.
 - Alphabetically sorted target-language selector with provider-specific language-code mapping.
 - Structure-aware Markdown, MDX, HTML/XML, and plain-text processing.
@@ -81,7 +82,7 @@ guide.auto.zh-CN.20260720T101530Z.md
 
 The translated document remains a normal editable file. Metadata is stored under `.vscode-doc-translator-cache/` next to the source. In `hidden-cache` mode, both the translation and metadata are stored in that directory.
 
-A cached result is reused only when its source hash, target language, provider, output mode, and translated-file hash still match. If a translated file has been edited, it is preserved and is not treated as an unchanged cache artifact.
+A cached result is reused only when its source hash, target language, provider profile, output mode, and translated-file hash still match. For AI providers, the profile includes the model, endpoint, token budgets, and translation harness version, so changing any of them starts a new translation. If a translated file has been edited, it is preserved and is not treated as an unchanged cache artifact.
 
 `docTranslator.cache.deleteStaleAutoTranslations` is disabled by default. When enabled, older auto translations are deleted only when their current hash still matches their recorded metadata; manually edited translations are kept.
 

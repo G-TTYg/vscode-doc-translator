@@ -33,6 +33,7 @@ API Key 保存在 VS Code SecretStorage 中。通常不需要手动编辑 `setti
 - 从编辑器、资源管理器或命令面板翻译整份文档。
 - 原生支持 OpenAI Responses、Anthropic Messages 和 Gemini GenerateContent API。
 - 支持 OpenAI-compatible Chat Completions 接口和本地兼容网关。
+- AI 质量检查会对大面积原文回显定向重试一次；修复仍失败时停止并且不写入误导性的“译文”。
 - 支持 DeepL、Google Cloud Translation 和 Microsoft Translator。
 - 目标语言下拉列表按字母顺序排列，并自动转换不同供应商的语言代码。
 - 支持 Markdown、MDX、HTML/XML 和纯文本的结构化处理。
@@ -81,7 +82,7 @@ guide.auto.zh-CN.20260720T101530Z.md
 
 译文是可以正常编辑的普通文件，元数据保存在源文件旁的 `.vscode-doc-translator-cache/` 中。选择 `hidden-cache` 模式后，译文和元数据都会保存在该目录。
 
-只有当源文件哈希、目标语言、服务、输出模式和译文哈希都匹配时，插件才会复用缓存。如果译文已被手动编辑，插件会保留它，也不会把它视为未修改缓存。
+只有当源文件哈希、目标语言、服务配置、输出模式和译文哈希都匹配时，插件才会复用缓存。AI 服务配置包含模型、接口地址、token 预算和翻译 harness 版本；修改其中任意一项都会重新翻译。如果译文已被手动编辑，插件会保留它，也不会把它视为未修改缓存。
 
 `docTranslator.cache.deleteStaleAutoTranslations` 默认关闭。启用后，插件只会删除当前哈希仍与元数据一致的旧自动译文；手动编辑过的译文始终保留。
 
